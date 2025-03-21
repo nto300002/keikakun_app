@@ -282,6 +282,31 @@ created_at: datetime default=datetime.jstnow
 updated_at: datetime default=datetime.jstnow
 ```
 
+#### google drive 拡張機能
+
+GoogleIntegration {
+id: int(PK)
+user_id: int(FK=user.id)
+google_account: text
+access_token: text
+refresh_token: text
+token_expiry: datetime
+created_at: datetime
+updated_at: datetime
+}
+
+GoogleDocument {
+id: int(PK)
+service_recipient_id: int(FK=service_recipient.id)
+support_plan_id: int(FK=support_plan.id)
+document_type: enum('sheet', 'doc', 'form')
+google_file_id: text
+google_file_url: text
+last_synced: datetime
+created_at: datetime
+updated_at: datetime
+}
+
 ```mermaid
 erDiagram
 User {
