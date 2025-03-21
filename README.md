@@ -114,6 +114,7 @@ https://qiita.com/ho_na/items/a84f9a0db793cb0411db
 - firebase
 - supabase
 - nextjs
+- google api
 
 # github actions CI/CD
 
