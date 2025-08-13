@@ -1,0 +1,8 @@
+memo.md
+.memo
+.env
+.env.local
+memo.md
+node_modules
+
+__pycache__
