@@ -1,0 +1,6 @@
+[submodule "k_front"]
+	path = k_front
+	url = https://github.com/nto300002/keikakun_front
+[submodule "k_back"]
+	path = k_back
+	url = https://github.com/nto300002/keikakun_back
