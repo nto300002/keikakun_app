@@ -1,0 +1,12 @@
+services:
+  backend:
+    build:
+      context: ./k_back
+      dockerfile: Dockerfile
+      target: development
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./k_back:/app
+    env_file:
+      - .env
