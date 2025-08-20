@@ -44,5 +44,6 @@ jobs:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
 
       - name: Deploy to Cloud Run using Cloud Build
+        id: deploy
         working-directory: ./k_back
         run: gcloud builds submit --config cloudbuild.yaml .
