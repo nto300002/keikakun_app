@@ -1,5 +1,7 @@
 # keikakun_app
 
+## now debug_messeages
+
 # keikakun
 ### **アプリケーション要件定義書: ケイカくん**
 
