@@ -1,4 +1,4 @@
-# keikakun_app1
+# keikakun_app
 
 # keikakun
 ### **アプリケーション要件定義書: ケイカくん**
