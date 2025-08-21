@@ -56,7 +56,7 @@ jobs:
         working-directory: ./k_back
         run: |
           gcloud builds submit \
-            --config cloudbuild.yaml \
+            --config cloudbuild.yml \
             --substitutions=_PROD_DATABASE_URL="${{ secrets.PROD_DATABASE_URL }}",_PROD_SECRET_KEY="${{ secrets.PROD_SECRET_KEY }}" \
             .
           gcloud builds submit --config cloudbuild.yml .
