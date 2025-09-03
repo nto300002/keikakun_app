@@ -47,8 +47,8 @@ jobs:
           MAIL_FROM: "test@example.com"
           MAIL_SERVER: "smtp.example.com"
           MAIL_PORT: "587"
-          # 可読性を重視し "true" を使用
-          MAIL_DEBUG: "true"
+          # ライブラリの仕様に合わせ "1" (True) を使用
+          MAIL_DEBUG: "1"
         run: pytest
 
       - name: Authenticate to Google Cloud
