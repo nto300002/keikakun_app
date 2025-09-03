@@ -4,5 +4,6 @@ memo.md
 .env.local
 memo.md
 node_modules
-
+.gemini
+.claude
 __pycache__
