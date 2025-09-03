@@ -41,6 +41,14 @@ jobs:
           DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
           SECRET_KEY: ${{ secrets.TEST_SECRET_KEY }}
           FRONTEND_URL: "http://test.local"
+          # ダミーのメール情報を追加
+          MAIL_USERNAME: "testuser"
+          MAIL_PASSWORD: "testpassword"
+          MAIL_FROM: "test@example.com"
+          MAIL_SERVER: "smtp.example.com"
+          MAIL_PORT: "587"
+          # 可読性を重視し "true" を使用
+          MAIL_DEBUG: "true"
         run: pytest
 
       - name: Authenticate to Google Cloud
