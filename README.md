@@ -1,6 +1,6 @@
 # keikakun_app
 
-# keikakun_
+# keikakun
 ### **アプリケーション要件定義書: ケイカくん**
 
 **1. アプリケーション概要**
