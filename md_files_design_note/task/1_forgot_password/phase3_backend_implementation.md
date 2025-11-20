@@ -1,3 +1,8 @@
+<!--
+作業ブランチ: issue/feature-パスワードを忘れた際の処理
+注意: このファイルを編集する場合、必ず作業中のブランチ名を上部に記載し、変更はそのブランチへ push してください。
+-->
+
 # Phase 3: バックエンド実装フェーズ
 
 パスワードリセット機能のCRUD操作、エンドポイント、メール送信の実装
@@ -51,7 +56,7 @@ class CRUDPasswordReset:
         *,
         staff_id: uuid.UUID,
         token: str,
-        expires_in_hours: int = 1
+        expires_in_minutes: int = 30
     ) -> PasswordResetToken:
         """
         パスワードリセットトークンを作成（トークンはハッシュ化して保存）
@@ -60,12 +65,12 @@ class CRUDPasswordReset:
             db: データベースセッション
             staff_id: スタッフID
             token: トークン文字列（UUID v4）- 生のトークン
-            expires_in_hours: 有効期限（時間）
+            expires_in_minutes: 有効期限（分）- デフォルト30分（Phase 1レビュー推奨値）
 
         Returns:
             作成されたトークン
         """
-        expires_at = datetime.now(timezone.utc) + timedelta(hours=expires_in_hours)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=expires_in_minutes)
         token_hash = hash_reset_token(token)
 
         db_obj = PasswordResetToken(
@@ -290,7 +295,7 @@ async def send_password_reset_email(
         "title": subject,
         "staff_name": staff_name,
         "reset_url": reset_url,
-        "expire_hours": 1,  # トークン有効期限
+        "expire_minutes": 30,  # トークン有効期限（Phase 1レビュー推奨値）
     }
 
     # メール送信はトランザクション外で行う（DB変更後）
@@ -424,7 +429,7 @@ async def send_password_changed_notification(
         <div class="warning">
             <p>
                 <strong>重要：</strong><br>
-                このリンクは{{ expire_hours }}時間のみ有効です。<br>
+                このリンクは{{ expire_minutes }}分間のみ有効です。<br>
                 パスワードリセットをリクエストしていない場合は、このメールを無視してください。
             </p>
         </div>
@@ -585,6 +590,7 @@ from app.schemas.auth import (
 from app.crud import password_reset as crud_password_reset
 from app.core.mail import send_password_reset_email, send_password_changed_notification
 from app.core.security import get_password_hash
+from app.core.config import settings
 from app.models.staff import Session as StaffSession
 from app.messages import ja
 
@@ -597,7 +603,7 @@ router = APIRouter()
     response_model=PasswordResetResponse,
     status_code=status.HTTP_200_OK,
 )
-@limiter.limit("5/10minute")
+@limiter.limit(settings.RATE_LIMIT_FORGOT_PASSWORD)
 async def forgot_password(
     *,
     request: Request,
@@ -627,7 +633,7 @@ async def forgot_password(
                 db,
                 staff_id=staff.id,
                 token=token,
-                expires_in_hours=1
+                expires_in_minutes=settings.PASSWORD_RESET_TOKEN_EXPIRE_MINUTES
             )
 
             # 監査ログを記録
@@ -689,7 +695,7 @@ async def forgot_password(
     response_model=PasswordResetResponse,
     status_code=status.HTTP_200_OK,
 )
-@limiter.limit("3/10minute")
+@limiter.limit(settings.RATE_LIMIT_RESEND_EMAIL)
 async def resend_reset_email(
     *,
     request: Request,
@@ -698,7 +704,7 @@ async def resend_reset_email(
     staff_crud=Depends(deps.get_staff_crud),
 ):
     """
-    パスワードリセットメールを再送信します（レート制限: 3回/10分）
+    パスワードリセットメールを再送信します（レート制限: 環境変数から取得）
     forgot_passwordと同じロジックだが、より厳しいレート制限を適用
     """
     return await forgot_password(
@@ -788,62 +794,68 @@ async def reset_password(
         )
 
     try:
-        # パスワードを更新
-        staff.hashed_password = get_password_hash(data.new_password)
-        staff.password_changed_at = datetime.now(timezone.utc)
-        staff.failed_password_attempts = 0
-        staff.is_locked = False
+        # メイントランザクション
+        async with db.begin():
+            # パスワードを更新
+            staff.hashed_password = get_password_hash(data.new_password)
+            staff.password_changed_at = datetime.now(timezone.utc)
+            staff.failed_password_attempts = 0
+            staff.is_locked = False
 
-        # トークンを使用済みにマーク（楽観的ロック）
-        marked_token = await crud_password_reset.mark_as_used(db, token_id=token_obj.id)
-        if not marked_token:
-            # 既に使用済み（レース条件）
+            # トークンを使用済みにマーク（楽観的ロック）
+            marked_token = await crud_password_reset.mark_as_used(db, token_id=token_obj.id)
+            if not marked_token:
+                # 既に使用済み（レース条件）
+                await crud_password_reset.create_audit_log(
+                    db,
+                    staff_id=staff.id,
+                    action='failed',
+                    email=staff.email,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                    success=False,
+                    error_message="Token already used (race condition)"
+                )
+                await db.commit()
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=ja.AUTH_RESET_TOKEN_ALREADY_USED,
+                )
+
+            # セッション無効化（確認付き）
+            stmt = (
+                update(StaffSession)
+                .where(StaffSession.staff_id == staff.id)
+                .values(
+                    is_active=False,
+                    revoked_at=datetime.now(timezone.utc)
+                )
+            )
+            result = await db.execute(stmt)
+            revoked_count = result.rowcount
+
+            # 監査ログを記録
             await crud_password_reset.create_audit_log(
                 db,
                 staff_id=staff.id,
-                action='failed',
+                action='completed',
                 email=staff.email,
                 ip_address=ip_address,
                 user_agent=user_agent,
-                success=False,
-                error_message="Token already used (race condition)"
+                success=True
             )
+
             await db.commit()
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=ja.AUTH_RESET_TOKEN_ALREADY_USED,
+
+            # 通知メールを送信（トランザクション外）
+            await send_password_changed_notification(
+                email=staff.email,
+                staff_name=staff.full_name
             )
 
-        # 【重要】全セッションを無効化
-        stmt = (
-            update(StaffSession)
-            .where(StaffSession.staff_id == staff.id)
-            .values(is_active=False, revoked_at=datetime.now(timezone.utc))
-        )
-        await db.execute(stmt)
-
-        # 監査ログを記録
-        await crud_password_reset.create_audit_log(
-            db,
-            staff_id=staff.id,
-            action='completed',
-            email=staff.email,
-            ip_address=ip_address,
-            user_agent=user_agent,
-            success=True
-        )
-
-        await db.commit()
-
-        # 通知メールを送信（トランザクション外）
-        await send_password_changed_notification(
-            email=staff.email,
-            staff_name=staff.full_name
-        )
-
-        return PasswordResetResponse(
-            message=ja.AUTH_PASSWORD_RESET_SUCCESS
-        )
+            return PasswordResetResponse(
+                message=ja.AUTH_PASSWORD_RESET_SUCCESS
+            )
 
     except HTTPException:
         raise
@@ -857,7 +869,7 @@ async def reset_password(
             ip_address=ip_address,
             user_agent=user_agent,
             success=False,
-            error_message=str(e)
+            error_message=sanitize_error_message(e)
         )
         await db.commit()
         raise HTTPException(
@@ -1095,7 +1107,13 @@ def get_client_ip(request: Request) -> str:
     if forwarded_for:
         return forwarded_for.split(",")[0].strip()  # ❌ 無条件で信頼
 
-    # ...
+    # X-Real-IPヘッダー（nginxなど）
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip
+
+    # 直接接続の場合
+    return request.client.host if request.client else "unknown"
 ```
 
 **影響**:
@@ -1281,7 +1299,10 @@ async def reset_password(...):
         )
 
         # メール送信（トランザクション外）
-        await send_password_changed_notification(...)
+        await send_password_changed_notification(
+            email=staff.email,
+            staff_name=staff.full_name
+        )
 
     except Exception as e:
         # ✅ 失敗ログも別トランザクションで確実に記録
@@ -1437,10 +1458,11 @@ async def forgot_password(...):
 ```python
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from app.core.config import settings
 
 # IPベースとメールアドレスベースの複合レート制限
 @router.post("/forgot-password")
-@limiter.limit("5/10minute")  # IP制限
+@limiter.limit(settings.RATE_LIMIT_FORGOT_PASSWORD)  # 環境変数から取得
 async def forgot_password(...):
     # ✅ メールアドレスベースの追加チェック
     recent_requests = await crud_password_reset.count_recent_requests(
@@ -1636,16 +1658,14 @@ async def reset_password(
             staff.is_locked = False
 
             # トークンを使用済みにマーク（楽観的ロック）
-            marked_token = await crud_password_reset.mark_as_used(
-                db, token_id=token_obj.id
-            )
+            marked_token = await crud_password_reset.mark_as_used(db, token_id=token_obj.id)
             if not marked_token:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=ja.AUTH_RESET_TOKEN_ALREADY_USED,
                 )
 
-            # ✅ セッション無効化（確認付き）
+            # セッション無効化（確認付き）
             stmt = (
                 update(StaffSession)
                 .where(StaffSession.staff_id == staff.id)
@@ -1657,39 +1677,28 @@ async def reset_password(
             result = await db.execute(stmt)
             revoked_count = result.rowcount
 
-            logger.info(
-                f"Revoked {revoked_count} sessions for staff {staff.id}"
+            # 監査ログを記録
+            await crud_password_reset.create_audit_log(
+                db,
+                staff_id=staff.id,
+                action='completed',
+                email=staff.email,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                success=True
             )
 
-            # トランザクション自動コミット
+            await db.commit()
 
-        # ✅ 成功監査ログ（別トランザクション）
-        await log_audit_separately(
-            db,
-            staff_id=staff.id,
-            action='completed',
-            email=staff.email,
-            ip_address=ip_address,
-            user_agent=user_agent,
-            success=True
-        )
-
-        # ✅ メール送信（エラーハンドリング付き）
-        try:
+            # 通知メールを送信（トランザクション外）
             await send_password_changed_notification(
                 email=staff.email,
                 staff_name=staff.full_name
             )
-        except Exception as email_error:
-            logger.error(
-                f"Failed to send notification email: {email_error}",
-                exc_info=True
-            )
-            # メール失敗はログのみ、処理は成功扱い
 
-        return PasswordResetResponse(
-            message=ja.AUTH_PASSWORD_RESET_SUCCESS
-        )
+            return PasswordResetResponse(
+                message=ja.AUTH_PASSWORD_RESET_SUCCESS
+            )
 
     except HTTPException:
         raise
