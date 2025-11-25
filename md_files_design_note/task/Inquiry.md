@@ -2,19 +2,22 @@
 - ownerから受け取る: 退会処理、課金処理
 - 全Staffから受け取る: 問い合わせ
 - 発信: おしらせ送信
-
+- 監視ログを可視化
+- 新規事務所作成などのログ
 
 ## データ設計
 staffにrole追加
-add_admin = 'app_admin'
+app_admin = 'app_admin'
 
-### 機能: ユーザー情報
-- staff: 名前、メールアドレス
-- staff削除ボタン(ownerと同意あり)
+通知機能を介して, StaffRole.app_adminのidとそれ以外のRoleを持つStaffのidを持つカラムを持ったテーブルを作成
+- 退会処理リクエストテーブル(app_admin:Staff = 1:1)
+- 問い合わせテーブル(app_admin:Staff = 1:1)
+- おしらせ発信テーブル(app_admin:Staff = 1:many)
 
-### 機能: 事務所情報
-- 課金ログ
-- 
+
+### 機能: 退会処理
+
+
 
 ### 機能: **アクセスログ・監査ログ**
 ```python
