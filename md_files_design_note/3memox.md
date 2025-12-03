@@ -1,247 +1,107 @@
-# メッセージ詳細ページへのリンクが404になる問題
+# 全体テスト実行時の ResourceClosedError 調査と解決
 
-## 現象
+## 問題の概要
 
-MessageCardコンポーネントのリンクをクリックすると404エラーが発生。
+全体テスト実行時のみ、`test_withdrawal_requests.py`で`sqlalchemy.exc.ResourceClosedError: This Connection is closed`エラーが発生。
+単独実行時や小規模なテストグループでは発生しない。
 
-```tsx
-<Link
-  href={`/notice/messages/${message.message_id}`}
-  className="text-white font-bold text-lg hover:text-blue-400 transition-colors cursor-pointer"
->
-  {message.title}
-</Link>
-```
-
-**ファイル**: `k_front/components/notice/MessageCard.tsx` (line 130)
-
----
-
-## 調査結果
-
-### 1. ファイル構造は正しい ✅
+## エラーログ分析
 
 ```
-k_front/app/(protected)/notice/
-├── [id]
-│   └── page.tsx          # 通知詳細（承認リクエスト等）
-├── messages
-│   └── [id]
-│       └── page.tsx      # メッセージ詳細
-└── page.tsx              # 通知一覧
+tests/api/v1/test_withdrawal_requests.py:251: in test_get_withdrawal_requests_as_owner
+    response = await async_client.get("/api/v1/withdrawal-requests")
+...
+tests/api/v1/test_welfare_recipients_employee_restriction.py:88: in _override
+    result = await db_session.execute(stmt)
+...
+sqlalchemy.exc.ResourceClosedError: This Connection is closed
 ```
 
-- メッセージ詳細ページ: `/notice/messages/[id]/page.tsx` ✅
-- ルーティングパス: `/notice/messages/{message_id}` ✅
+**重要な発見**: エラーは`test_withdrawal_requests.py`で発生しているが、実際のエラー発生箇所は`test_welfare_recipients_employee_restriction.py:88`の`_override`関数内。
 
-### 2. コンポーネントコードは正しい ✅
+## 根本原因
 
-- MessageCard のリンク: `/notice/messages/${message.message_id}` ✅
-- page.tsx の実装: params.id を正しく取得 ✅
-- 自動既読機能: 実装済み ✅
+### テスト隔離の問題
 
-### 3. 考えられる原因
+`test_welfare_recipients_employee_restriction.py`の`override_current_user`関数が問題：
 
-#### A. Next.js開発サーバーのキャッシュ問題
-Next.jsの開発サーバーが古いルーティング情報をキャッシュしている可能性。
+```python
+async def override_current_user(db_session: AsyncSession, staff: Staff):
+    """get_current_user を上書きしてスタッフを返す"""
+    async def _override():
+        stmt = select(Staff).where(Staff.id == staff.id).options(
+            selectinload(Staff.office_associations).selectinload(OfficeStaff.office)
+        ).execution_options(populate_existing=True)
+        result = await db_session.execute(stmt)  # ← 閉じられたdb_sessionを使用
+        return result.scalars().first()
 
-#### B. TypeScriptビルドエラー
-ページにTypeScriptエラーがあり、正しくビルドされていない可能性。
+    app.dependency_overrides[get_current_user] = _override  # ← クリーンアップされない
+```
 
-#### C. message_idが不正な値
-MessageInboxItemの`message_id`フィールドが正しく設定されていない可能性。
+### 問題の流れ
 
----
+1. `test_welfare_recipients_employee_restriction.py`のテストが実行される
+2. 各テストで`override_current_user`を呼び出し、`app.dependency_overrides[get_current_user]`を設定
+3. `_override`関数がクロージャで`db_session`をキャプチャ
+4. テスト完了後、`db_session`がクローズされる
+5. **`app.dependency_overrides`がクリアされない** ← 問題
+6. 次のテスト（`test_withdrawal_requests.py`）実行時、古いオーバーライドが残っている
+7. `get_current_user`が呼ばれると、クローズされた`db_session`を使おうとする
+8. `ResourceClosedError`が発生
 
-## 解決方法
+## 解決策
 
-### ステップ1: フロントエンド開発サーバーを再起動
+### 修正内容
+
+`test_welfare_recipients_employee_restriction.py`に`autouse=True`のfixtureを追加して、各テスト後に自動的に`app.dependency_overrides`をクリアする：
+
+```python
+@pytest.fixture(autouse=True)
+def cleanup_dependency_overrides():
+    """各テスト後にdependency_overridesをクリーンアップ"""
+    yield
+    # テスト完了後にクリーンアップ
+    app.dependency_overrides.clear()
+```
+
+### 修正箇所
+
+- ファイル: `tests/api/v1/test_welfare_recipients_employee_restriction.py`
+- 行: 30-35（新規追加）
+
+## 検証結果
+
+### 修正前
+
+全体テスト実行時に17個の`test_withdrawal_requests.py`テストが`ResourceClosedError`で失敗。
+
+### 修正後
 
 ```bash
-# k_frontディレクトリで実行
-cd k_front
-npm run dev
-
-# または、Dockerを使用している場合
-docker-compose restart frontend
+docker compose exec backend pytest tests/api/v1/test_welfare_recipients_employee_restriction.py tests/api/v1/test_withdrawal_requests.py -v
 ```
 
-### ステップ2: TypeScriptエラーをチェック
+**結果: 25 passed in 187.90s (0:03:07) - 全テスト成功**
 
-```bash
-cd k_front
-npm run type-check
+内訳：
+- `test_welfare_recipients_employee_restriction.py`: 8 tests PASSED
+- `test_withdrawal_requests.py`: 17 tests PASSED
 
-# または
-npx tsc --noEmit
-```
+## 教訓
 
-### ステップ3: ブラウザのキャッシュをクリア
+1. **テスト隔離の重要性**: FastAPIの`app.dependency_overrides`は明示的にクリアしないとテスト間で漏れる
+2. **autouse fixtureの活用**: pytestの`autouse=True`で自動クリーンアップを実装
+3. **クロージャとセッションライフサイクル**: クロージャでキャプチャされたデータベースセッションのライフサイクルに注意
+4. **エラーログの深読み**: スタックトレースを丁寧に読むことで、真の原因が別のファイルにあることが判明
 
-- ブラウザのデベロッパーツールを開く (F12)
-- Network タブで「Disable cache」を有効化
-- ページをリロード (Ctrl+Shift+R / Cmd+Shift+R)
+## 今後の推奨事項
 
-### ステップ4: message_idの値を確認
-
-ブラウザのコンソールで、MessageCardが受け取っているデータを確認：
-
-```javascript
-// MessagesTab.tsx または Noticeのページで
-console.log('Messages:', messages.map(m => ({
-  id: m.message_id,
-  title: m.title
-})));
-```
-
-### ステップ5: APIレスポンスを確認
-
-メッセージ取得APIが正しいデータを返しているか確認：
-
-```bash
-# curlでテスト（要：認証トークン）
-curl -X GET "http://localhost:8000/api/v1/messages/inbox" \
-  -H "Cookie: access_token=YOUR_TOKEN" \
-  -H "X-CSRF-Token: YOUR_CSRF_TOKEN"
-```
-
-レスポンスの`messages[].message_id`フィールドが存在し、UUID形式であることを確認。
+1. 他のテストファイルで`app.dependency_overrides`を使用している箇所がないか確認
+2. 同様のクリーンアップfixtureが必要な箇所を特定
+3. テスト全体の実行順序に依存しない堅牢なテスト設計を維持
 
 ---
 
-## Next.jsルーティングの確認
-
-### 正しいルーティング
-
-| URL | ファイルパス | 説明 |
-|-----|-------------|------|
-| `/notice` | `app/(protected)/notice/page.tsx` | 通知一覧 |
-| `/notice/messages/{uuid}` | `app/(protected)/notice/messages/[id]/page.tsx` | メッセージ詳細 |
-| `/notice/{uuid}` | `app/(protected)/notice/[id]/page.tsx` | 通知詳細（承認等） |
-
-### パラメータの取得方法
-
-```tsx
-// app/(protected)/notice/messages/[id]/page.tsx
-import { useParams } from 'next/navigation';
-
-export default function MessageDetailPage() {
-  const params = useParams();
-  const messageId = params.id as string;  // ✅ 正しい
-  // ...
-}
-```
-
----
-
-## デバッグ手順
-
-### 1. リンクが正しく生成されているか確認
-
-ブラウザのデベロッパーツールでリンク要素を検査：
-
-```html
-<!-- 期待される出力 -->
-<a href="/notice/messages/12345678-1234-1234-1234-123456789abc">
-  メッセージタイトル
-</a>
-```
-
-### 2. クリック時のURLを確認
-
-リンクをクリックしたときにブラウザのURLバーが正しく変わるか確認：
-
-```
-期待: http://localhost:3000/notice/messages/12345678-1234-1234-1234-123456789abc
-```
-
-### 3. 404ページのソースを確認
-
-404ページが表示されたら、以下を確認：
-- Next.jsの404ページか？ → ルーティング問題
-- カスタム404ページか？ → API応答問題
-- 真っ白なページか？ → JavaScriptエラー
-
----
-
-## よくある問題と解決策
-
-### 問題1: Dynamic Routeが認識されない
-
-**原因**: Next.jsの開発サーバーが新しいページを認識していない
-
-**解決**:
-```bash
-# 開発サーバーを再起動
-npm run dev
-```
-
-### 問題2: ビルドエラーで404
-
-**原因**: TypeScriptエラーやインポートエラーでページがビルドされていない
-
-**解決**:
-```bash
-# エラーを確認
-npm run type-check
-
-# ビルドを試行
-npm run build
-```
-
-### 問題3: 認証エラーで404
-
-**原因**: (protected)グループ内のページなので認証が必要
-
-**解決**:
-- ログイン状態を確認
-- Cookieに`access_token`が存在するか確認
-- 認証ミドルウェアのログを確認
-
----
-
-## 修正が完了したら
-
-以下を確認：
-- [ ] フロントエンド開発サーバーを再起動した
-- [ ] TypeScriptエラーがない（`npm run type-check`）
-- [ ] ブラウザキャッシュをクリアした
-- [ ] メッセージ一覧からリンクをクリックして詳細ページが表示される
-- [ ] メッセージが未読の場合、自動的に既読になる
-- [ ] 404エラーが発生しない
-
----
-
-## 追加調査が必要な場合
-
-もし上記の手順で解決しない場合：
-
-1. **Next.jsのルーティングログを有効化**:
-   ```bash
-   # next.config.jsに追加
-   module.exports = {
-     logging: {
-       fetches: {
-         fullUrl: true,
-       },
-     },
-   }
-   ```
-
-2. **ブラウザコンソールのエラーを確認**:
-   - F12 → Console タブ
-   - エラーメッセージをコピー
-
-3. **Network タブでAPIリクエストを確認**:
-   - F12 → Network タブ
-   - メッセージ詳細取得のリクエストを確認
-   - ステータスコード、レスポンスボディを確認
-
----
-
-## 参考情報
-
-- [Next.js App Router - Dynamic Routes](https://nextjs.org/docs/app/building-your-application/routing/dynamic-routes)
-- [Next.js App Router - Route Groups](https://nextjs.org/docs/app/building-your-application/routing/route-groups)
-- MessageCard実装: `k_front/components/notice/MessageCard.tsx`
-- メッセージ詳細ページ: `k_front/app/(protected)/notice/messages/[id]/page.tsx`
+**修正日**: 2025-11-29
+**対応者**: Claude Code
+**ステータス**: 解決済み
