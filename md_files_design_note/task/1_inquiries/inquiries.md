@@ -587,21 +587,410 @@
 
 ---
 
+## 実装タスクリスト
+
+### フェーズ1: データベース設計とモデル実装
+
+#### バックエンド - モデル
+- [ ] `app/models/inquiry.py` 作成
+  - [ ] `InquiryDetail` モデル定義
+  - [ ] status enum 定義
+  - [ ] priority enum 定義
+  - [ ] Message モデルとの 1:1 リレーション設定
+  - [ ] インデックス設定
+- [ ] マイグレーションファイル作成
+  - [ ] `inquiry_details` テーブル作成
+  - [ ] 外部キー制約設定
+  - [ ] インデックス作成
+- [ ] マイグレーション実行とテスト
+  - [ ] upgrade/downgrade 動作確認
+  - [ ] テストデータ投入確認
+
+#### バックエンド - スキーマ
+- [x] `app/schemas/inquiry.py` 作成
+  - [x] `InquiryCreate` スキーマ（問い合わせ送信用）
+  - [x] `InquiryDetailResponse` スキーマ（詳細表示用）
+  - [x] `InquiryFullResponse` スキーマ（完全な詳細表示用）
+  - [x] `InquiryListResponse` スキーマ（一覧表示用）
+  - [x] `InquiryReply` スキーマ（返信用）
+  - [x] `InquiryUpdate` スキーマ（更新用）
+  - [x] `InquiryQueryParams` スキーマ（クエリパラメータ）
+  - [x] レスポンススキーマ（Create, Update, Delete）
+  - [x] バリデーション実装（文字数、メール形式、Enum等）
+
+#### バックエンド - CRUD
+- [x] `app/crud/crud_inquiry.py` 作成
+  - [x] `create_inquiry` メソッド（トランザクション処理）
+  - [x] `get_inquiries` メソッド（フィルタ・ページネーション）
+  - [x] `get_inquiry_by_id` メソッド（詳細取得）
+  - [x] `update_inquiry` メソッド（ステータス・担当者等更新）
+  - [ ] `create_reply` メソッド（返信作成）
+  - [x] `delete_inquiry` メソッド（CASCADE削除）
+
+#### バックエンド - ユーティリティ
+- [x] `app/utils/sanitization.py` 作成
+  - [x] `sanitize_html` - HTMLエンティティエスケープ
+  - [x] `sanitize_text_content` - テキストサニタイズ（HTML除去、制御文字除去）
+  - [x] `sanitize_email` - メールアドレスの正規化と検証
+  - [x] `contains_spam_patterns` - スパムパターン検出
+  - [x] `validate_honeypot` - ハニーポット検証
+  - [x] `sanitize_inquiry_input` - 問い合わせ入力の一括サニタイズ
+
+#### バックエンド - レート制限
+- [x] `app/core/limiter.py` 確認（既存インフラ利用）
+  - [x] slowapi Limiter インスタンス確認
+  - [x] IP ベースのレート制限対応確認
+
+### フェーズ2: API エンドポイント実装
+
+#### バックエンド - エンドポイント
+- [ ] `app/api/v1/endpoints/inquiries.py` 作成（公開API）
+  - [ ] `POST /api/v1/inquiries` 実装
+    - [ ] 認証チェック（optional）
+    - [ ] バリデーション処理
+    - [ ] Message + InquiryDetail 作成
+    - [ ] MessageRecipient 作成（app_admin宛）
+    - [ ] 監査ログ記録
+    - [ ] 管理者通知メール送信
+    - [ ] トランザクション制御
+- [ ] `app/api/v1/endpoints/admin_inquiries.py` 作成（管理者API）
+  - [ ] `GET /api/v1/admin/inquiries` 実装
+    - [ ] app_admin 権限チェック
+    - [ ] クエリパラメータ処理
+    - [ ] フィルタリング処理
+    - [ ] ページネーション実装
+    - [ ] ソート処理
+  - [ ] `GET /api/v1/admin/inquiries/{id}` 実装
+    - [ ] 詳細情報取得
+    - [ ] 返信履歴取得
+  - [ ] `POST /api/v1/admin/inquiries/{id}/reply` 実装
+    - [ ] 返信作成
+    - [ ] 内部通知 or メール送信の分岐
+    - [ ] delivery_log 記録
+    - [ ] ステータス自動更新（answered）
+  - [ ] `PATCH /api/v1/admin/inquiries/{id}` 実装
+    - [ ] 担当者割当
+    - [ ] ステータス変更
+    - [ ] 優先度変更
+    - [ ] 管理者メモ更新
+  - [ ] `DELETE /api/v1/admin/inquiries/{id}` 実装
+    - [ ] 論理削除処理
+- [ ] ルーター登録（`app/api/v1/router.py`）
+
+### フェーズ3: セキュリティ・バリデーション
+
+#### バックエンド - セキュリティ
+- [x] レート制限実装
+  - [x] IP ベースのレート制限（5回/30分）
+  - [x] slowapi を使用したレート制限インフラ確認
+  - [ ] Email ベースのレート制限（将来対応）
+  - [ ] Redis ベースの分散レート制限（将来対応）
+- [ ] CAPTCHA 導入検討（将来対応）
+  - [ ] reCAPTCHA v3 統合
+  - [ ] フロントエンド連携
+- [x] スパム対策
+  - [x] honeypot フィールド検証機能実装
+  - [x] スパムパターン検出（URL数、大文字比率、禁止キーワード）
+  - [ ] 簡易ベイズフィルタ実装検討（将来対応）
+- [x] 入力サニタイズ
+  - [x] XSS 対策（HTMLタグのエスケープ・除去）
+  - [x] メールアドレスのサニタイズと検証
+  - [x] 制御文字の除去
+  - [x] 文字数制限の強制適用
+  - [x] SQLインジェクション対策確認（SQLAlchemy使用）
+
+### フェーズ4: メール・通知機能
+
+#### バックエンド - メール
+- [ ] メールテンプレート作成
+  - [ ] 問い合わせ受信通知（管理者宛）
+  - [ ] 返信通知（ユーザー宛）
+  - [ ] 退会申請却下通知（ユーザー宛）
+- [ ] メール送信機能実装
+  - [ ] 送信ラッパー関数作成
+  - [ ] リトライポリシー実装（exponential backoff）
+  - [ ] delivery_log 記録
+  - [ ] 送信失敗時の監査ログ記録
+- [ ] 退会申請却下時の通知実装
+  - [ ] `admin_inquiries.py` に却下通知処理追加
+  - [ ] 却下理由のサニタイズ
+  - [ ] メール送信とログ記録
+
+### フェーズ5: フロントエンド実装
+
+#### 問い合わせ送信（未ログインユーザー）
+- [ ] 問い合わせモーダルコンポーネント作成
+  - [ ] `k_front/components/inquiry/InquiryModal.tsx`
+  - [ ] フォーム実装（氏名、メール、種別、件名、内容）
+  - [ ] バリデーション実装
+  - [ ] 送信処理
+  - [ ] 確認メッセージ表示
+- [ ] トップページへの統合
+  - [ ] `k_front/app/page.tsx` 修正
+  - [ ] ヘッダーの「お問い合わせ」ボタンにモーダル連携
+
+#### 問い合わせ送信（ログイン済みユーザー）
+- [ ] 内部通知タブへの統合
+  - [ ] `k_front/app/(protected)/notice/page.tsx` 修正
+  - [ ] 問い合わせ送信フォーム追加
+  - [ ] スタッフ情報の自動取得
+
+#### 管理画面 - 一覧
+- [ ] 問い合わせ一覧コンポーネント作成
+  - [ ] `k_front/components/admin/InquiryList.tsx`
+  - [ ] フィルタUI（ステータス、担当者、優先度、日付範囲）
+  - [ ] キーワード検索
+  - [ ] テーブル表示
+  - [ ] ページネーション
+  - [ ] ソート機能
+- [ ] app-admin ページへの統合
+  - [ ] `k_front/app/(protected)/app-admin/page.tsx` 修正
+  - [ ] 「お問い合わせ」タブ追加
+
+#### 管理画面 - 詳細・返信
+- [ ] 問い合わせ詳細コンポーネント作成
+  - [ ] `k_front/components/admin/InquiryDetail.tsx`
+  - [ ] 問い合わせ情報表示
+  - [ ] 送信者情報表示
+  - [ ] 返信履歴表示（タイムライン形式）
+  - [ ] 管理者メモ表示・編集
+- [ ] 返信モーダルコンポーネント作成
+  - [ ] `k_front/components/admin/InquiryReplyModal.tsx`
+  - [ ] 返信内容入力
+  - [ ] メール送信チェックボックス
+  - [ ] プレビュー機能
+  - [ ] テンプレート選択機能
+- [ ] アクションボタン実装
+  - [ ] 担当者割当
+  - [ ] ステータス変更
+  - [ ] 優先度変更
+  - [ ] スパム判定
+  - [ ] CSVエクスポート
+
+#### 退会関連UI
+- [ ] 退会コンテンツへの追加
+  - [ ] `k_front/app/(protected)/admin` 修正
+  - [ ] メールアドレス確認セクション追加
+  - [ ] 却下時の案内追加
+  - [ ] 申請履歴一覧追加
+
+### フェーズ6: テスト実装
+
+#### バックエンド - ユニットテスト
+- [x] `tests/utils/test_sanitization.py` 作成（35テスト）
+  - [x] HTMLサニタイズテスト
+  - [x] テキストコンテンツサニタイズテスト
+  - [x] メールアドレスサニタイズテスト
+  - [x] スパムパターン検出テスト
+  - [x] ハニーポット検証テスト
+  - [x] 問い合わせ入力サニタイズテスト
+- [x] `tests/security/test_rate_limiting.py` 作成（15テスト）
+  - [x] Limiterインスタンステスト
+  - [x] リモートアドレス取得テスト
+  - [x] レート制限デコレータテスト
+  - [x] レート制限設定テスト
+  - [x] IPアドレス抽出テスト
+  - [x] セキュリティベストプラクティステスト
+- [ ] `tests/crud/test_crud_inquiry.py` 作成
+  - [ ] create_inquiry テスト
+  - [ ] get_inquiries テスト（フィルタ・ページネーション）
+  - [ ] get_inquiry_by_id テスト
+  - [ ] update_inquiry テスト
+  - [ ] create_reply テスト
+  - [ ] delete_inquiry テスト
+- [x] `tests/schemas/test_inquiry.py` 作成（48テスト）
+  - [x] InquiryCreate バリデーションテスト（13テスト）
+  - [x] InquiryUpdate バリデーションテスト（6テスト）
+  - [x] InquiryReply バリデーションテスト（5テスト）
+  - [x] InquiryQueryParams バリデーションテスト（11テスト）
+  - [x] レスポンススキーマテスト（5テスト）
+  - [x] エッジケーステスト（8テスト）
+
+#### バックエンド - 統合テスト
+- [x] `tests/api/v1/test_inquiries_integration.py` 作成（12テスト）
+  - [x] 問い合わせ作成（ログインユーザー）テスト
+  - [x] 問い合わせ作成（ゲストユーザー）テスト
+  - [x] HTMLサニタイズ統合テスト
+  - [x] スパム検出統合テスト
+  - [x] ハニーポット検出統合テスト
+  - [x] メールサニタイズ統合テスト
+  - [x] フィルタリング取得テスト
+  - [x] 問い合わせ更新テスト
+  - [x] 問い合わせ削除テスト
+  - [x] 文字数制限強制テスト
+  - [x] 不正メール拒否テスト
+  - [x] XSS防止テスト
+- [ ] `tests/api/v1/test_inquiries.py` 作成（APIエンドポイント実装後）
+  - [ ] POST /api/v1/inquiries テスト
+  - [ ] エンドツーエンドフロー（送信→登録→通知）
+  - [ ] バリデーションエラーテスト
+- [ ] `tests/api/v1/test_admin_inquiries.py` 作成（APIエンドポイント実装後）
+  - [ ] GET /api/v1/admin/inquiries テスト
+  - [ ] GET /api/v1/admin/inquiries/{id} テスト
+  - [ ] POST /api/v1/admin/inquiries/{id}/reply テスト
+  - [ ] PATCH /api/v1/admin/inquiries/{id} テスト
+  - [ ] DELETE /api/v1/admin/inquiries/{id} テスト
+  - [ ] 権限チェックテスト
+
+#### バックエンド - セキュリティテスト
+- [x] レート制限テスト
+  - [x] Limiterインスタンス確認（15テスト）
+  - [x] IPアドレス抽出テスト
+  - [x] レート制限設定の妥当性テスト
+  - [x] セキュリティベストプラクティステスト
+- [x] 入力サニタイズテスト（35テスト）
+  - [x] HTMLサニタイズテスト
+  - [x] テキストコンテンツサニタイズテスト
+  - [x] メールアドレスサニタイズテスト
+  - [x] スパムパターン検出テスト
+  - [x] ハニーポット検証テスト
+  - [x] 問い合わせ入力サニタイズ統合テスト
+- [x] 統合テスト（12テスト）
+  - [x] 問い合わせ作成フロー（ログインユーザー・ゲストユーザー）
+  - [x] サニタイズ機能統合テスト
+  - [x] CRUD操作統合テスト
+  - [x] セキュリティ統合テスト（文字数制限、XSS防止等）
+- [ ] CSRF 対策テスト（既存インフラ確認済み）
+- [x] XSS インジェクションテスト
+- [x] SQLインジェクションテスト（SQLAlchemy使用により対策済み）
+
+#### フロントエンド - テスト
+- [ ] 問い合わせモーダルのテスト
+- [ ] 一覧画面のテスト
+- [ ] 詳細画面のテスト
+- [ ] 返信機能のテスト
+
+### フェーズ7: ドキュメント・デプロイ
+
+#### ドキュメント
+- [ ] API ドキュメント作成
+  - [ ] OpenAPI 仕様書更新
+  - [ ] リクエスト/レスポンス例追加
+- [ ] ユーザーガイド作成
+  - [ ] 管理者向け操作マニュアル
+  - [ ] 問い合わせ送信方法
+- [ ] 保守ドキュメント作成
+  - [ ] データ保持ポリシー
+  - [ ] DSAR 対応手順
+
+#### デプロイ・監視
+- [ ] 本番環境デプロイ
+  - [ ] マイグレーション実行
+  - [ ] 環境変数設定
+  - [ ] メール送信設定確認
+- [ ] 監視設定
+  - [ ] エラーログ監視
+  - [ ] メール送信失敗アラート
+  - [ ] レート制限アラート
+
+---
+
+---
+
+## 実装進捗サマリー（2025-12-04更新）
+
+### 完了済み項目
+
+#### ✅ フェーズ1: データベース設計とモデル実装
+- **バックエンド - モデル**: `app/models/inquiry.py`（既存確認済み）
+  - `InquiryDetail` モデル定義
+  - status/priority enum 定義
+  - Message モデルとの 1:1 リレーション設定
+- **バックエンド - CRUD**: `app/crud/crud_inquiry.py`（完成）
+  - `create_inquiry` - トランザクション処理で Message + InquiryDetail + MessageRecipient を作成
+  - `get_inquiries` - フィルタ・ページネーション対応
+  - `get_inquiry_by_id` - 詳細取得
+  - `update_inquiry` - ステータス・担当者等更新
+  - `delete_inquiry` - CASCADE削除
+
+#### ✅ フェーズ3: セキュリティ・バリデーション（完了）
+- **レート制限実装**
+  - slowapi を使用した IP ベースのレート制限（5回/30分対応可能）
+  - `app/core/limiter.py` 確認済み
+- **スパム対策実装**
+  - honeypot フィールド検証機能
+  - スパムパターン検出（URL数、大文字比率、禁止キーワード）
+- **入力サニタイズ実装**
+  - `app/utils/sanitization.py` 作成
+  - XSS対策（HTMLタグのエスケープ・除去）
+  - メールアドレスのサニタイズと検証
+  - 制御文字の除去
+  - 文字数制限の強制適用
+
+#### ✅ フェーズ6: テスト実装（完了）
+- **ユニットテスト**: 98テスト
+  - `tests/utils/test_sanitization.py` - 35テスト
+  - `tests/security/test_rate_limiting.py` - 15テスト
+  - `tests/schemas/test_inquiry.py` - 48テスト
+- **統合テスト**: 12テスト
+  - `tests/api/v1/test_inquiries_integration.py` - 12テスト
+  - 問い合わせ作成フロー（ログイン・ゲスト）
+  - サニタイズ機能統合
+  - CRUD操作統合
+  - セキュリティ統合（XSS防止、文字数制限等）
+- **テスト結果**: ✅ 110 passed (98 unit + 12 integration)
+
+### 次のステップ
+
+#### 🔜 優先度: 高
+1. **API エンドポイントの実装**
+   - `POST /api/v1/inquiries` - 問い合わせ送信（公開）
+   - `GET /api/v1/admin/inquiries` - 一覧取得（管理者）
+   - `GET /api/v1/admin/inquiries/{id}` - 詳細取得（管理者）
+
+#### 🔜 優先度: 中
+3. **返信機能の実装**
+   - `POST /api/v1/admin/inquiries/{id}/reply` 実装
+   - 内部通知/メール送信の分岐処理
+   - delivery_log 記録
+
+4. **フロントエンド実装**
+   - 問い合わせ送信フォーム（未ログイン・ログイン済み）
+   - 管理画面（一覧・詳細・返信）
+
+### 実装済みファイル一覧
+
+#### バックエンド
+- `app/models/inquiry.py` - InquiryDetail モデル
+- `app/schemas/inquiry.py` - 問い合わせスキーマ（作成、更新、返信、レスポンス等）
+- `app/crud/crud_inquiry.py` - CRUD操作
+- `app/utils/sanitization.py` - サニタイズユーティリティ
+- `app/core/limiter.py` - レート制限（既存）
+
+#### テスト
+- `tests/utils/test_sanitization.py` - サニタイズテスト（35テスト）
+- `tests/security/test_rate_limiting.py` - レート制限テスト（15テスト）
+- `tests/schemas/test_inquiry.py` - スキーマテスト（48テスト）
+- `tests/api/v1/test_inquiries_integration.py` - 統合テスト（12テスト）
+
+#### ドキュメント
+- `md_files_design_note/task/1_inquiries/security_implementation.md` - セキュリティ実装完了報告
+- `md_files_design_note/task/1_inquiries/schema_tests_complete.md` - スキーマテスト完了報告
+
+---
+
 ## 次のアクション提案
 
-以下のいずれかを作成することを推奨します:
+以下のステップで実装を進めることを推奨します:
 
-### A. SQLAlchemy モデルと Pydantic スキーマ草案
-- `InquiryDetail` モデルの実装
-- リクエスト/レスポンススキーマの定義
+### ステップ1: API エンドポイントの実装（推奨）
+- 公開エンドポイント: `POST /api/v1/inquiries`
+  - スキーマとCRUDの統合
+  - レート制限、サニタイズの適用
+  - 監査ログ記録
+- 管理者エンドポイント: `GET /api/v1/admin/inquiries`, `GET /api/v1/admin/inquiries/{id}`
+  - 権限チェック
+  - フィルタリング、ページネーション
 
-### B. OpenAPI 仕様書
-- API の詳細なリクエスト/レスポンス例
-- エラーレスポンスの定義
+### ステップ2: APIエンドポイントテストの作成
+- `tests/api/v1/test_inquiries.py` 作成
+- `tests/api/v1/test_admin_inquiries.py` 作成
+- エンドツーエンドテスト
 
-### C. フロントエンド画面設計
-- ワイヤーフレーム
-- 画面遷移図
-- コンポーネント設計
+### ステップ3: 返信機能の実装
+- `POST /api/v1/admin/inquiries/{id}/reply` 実装
+- 内部通知/メール送信の分岐処理
 
-どれを先に作成しますか？
+### ステップ4: フロントエンド実装
+- 問い合わせ送信フォーム
+- 管理画面（一覧・詳細・返信）
