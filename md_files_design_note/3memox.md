@@ -1,1 +1,0 @@
-Hour must be in 0..23  
