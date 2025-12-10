@@ -1,0 +1,80 @@
+name: CI for Frontend
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'k_front/**'
+      - '.github/workflows/ci-frontend.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'k_front/**'
+      - '.github/workflows/ci-frontend.yml'
+
+jobs:
+  build-and-test:
+    name: Build and Test Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: k_front/package-lock.json
+
+      - name: Install dependencies
+        working-directory: k_front
+        run: npm ci
+
+      - name: Run linter
+        working-directory: k_front
+        run: npm run lint
+
+      - name: Check TypeScript types
+        working-directory: k_front
+        run: npx tsc --noEmit
+
+      - name: Build application
+        working-directory: k_front
+        run: npm run build
+        env:
+          # ビルド時に必要な環境変数があれば追加
+          NODE_ENV: production
+
+      - name: Cache build output
+        uses: actions/cache@v3
+        with:
+          path: |
+            k_front/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('k_front/package-lock.json') }}-${{ hashFiles('k_front/**/*.js', 'k_front/**/*.jsx', 'k_front/**/*.ts', 'k_front/**/*.tsx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('k_front/package-lock.json') }}-
+
+  lint-and-format:
+    name: Lint and Format Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: k_front/package-lock.json
+
+      - name: Install dependencies
+        working-directory: k_front
+        run: npm ci
+
+      - name: Run ESLint
+        working-directory: k_front
+        run: npm run lint
