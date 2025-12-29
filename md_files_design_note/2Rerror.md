@@ -1,178 +1,204 @@
-# 退会処理承認時の MissingGreenlet エラー調査報告
+stripe subscriptions update sub_1ShJJoBxyBErCNcA9CGI3naK \
+    -d cancel_at_period_end=true
+{
+  "id": "sub_1ShJJoBxyBErCNcA9CGI3naK",
+  "object": "subscription",
+  "application": null,
+  "application_fee_percent": null,
+  "automatic_tax": {
+    "disabled_reason": null,
+    "enabled": true,
+    "liability": {
+      "type": "self"
+    }
+  },
+  "billing_cycle_anchor": 1781827200,
+  "billing_cycle_anchor_config": null,
+  "billing_mode": {
+    "flexible": {
+      "proration_discounts": "included"
+    },
+    "type": "flexible",
+    "updated_at": 1766449150
+  },
+  "billing_thresholds": null,
+  "cancel_at": 1781827200,
+  "cancel_at_period_end": true,
+  "canceled_at": 1766449239,
+  "cancellation_details": {
+    "comment": null,
+    "feedback": "switched_service",
+    "reason": "cancellation_requested"
+  },
+  "collection_method": "charge_automatically",
+  "created": 1766449155,
+  "currency": "jpy",
+  "customer": "cus_TecYgxboEmne6z",
+  "customer_account": null,
+  "days_until_due": null,
+  "default_payment_method": "pm_1ShJJmBxyBErCNcAUNJdsp3g",
+  "default_source": null,
+  "default_tax_rates": [],
+  "description": null,
+  "discounts": [],
+  "ended_at": null,
+  "invoice_settings": {
+    "account_tax_ids": null,
+    "issuer": {
+      "type": "self"
+    }
+  },
+  "items": {
+    "object": "list",
+    "data": [
+      {
+        "id": "si_TecYRWXgmUoWim",
+        "object": "subscription_item",
+        "billing_thresholds": null,
+        "created": 1766449155,
+        "current_period_end": 1781827200,
+        "current_period_start": 1766449155,
+        "discounts": [],
+        "metadata": {},
+        "plan": {
+          "id": "price_1SczlUBxyBErCNcAIQxt2zGg",
+          "object": "plan",
+          "active": true,
+          "amount": 6000,
+          "amount_decimal": "6000",
+          "billing_scheme": "per_unit",
+          "created": 1765420680,
+          "currency": "jpy",
+          "interval": "month",
+          "interval_count": 1,
+          "livemode": false,
+          "metadata": {},
+          "meter": null,
+          "nickname": null,
+          "product": "prod_TaA5aAh04fiyQQ",
+          "tiers_mode": null,
+          "transform_usage": null,
+          "trial_period_days": null,
+          "usage_type": "licensed"
+        },
+        "price": {
+          "id": "price_1SczlUBxyBErCNcAIQxt2zGg",
+          "object": "price",
+          "active": true,
+          "billing_scheme": "per_unit",
+          "created": 1765420680,
+          "currency": "jpy",
+          "custom_unit_amount": null,
+          "livemode": false,
+          "lookup_key": null,
+          "metadata": {},
+          "nickname": null,
+          "product": "prod_TaA5aAh04fiyQQ",
+          "recurring": {
+            "interval": "month",
+            "interval_count": 1,
+            "meter": null,
+            "trial_period_days": null,
+            "usage_type": "licensed"
+          },
+          "tax_behavior": "unspecified",
+          "tiers_mode": null,
+          "transform_quantity": null,
+          "type": "recurring",
+          "unit_amount": 6000,
+          "unit_amount_decimal": "6000"
+        },
+        "quantity": 1,
+        "subscription": "sub_1ShJJoBxyBErCNcA9CGI3naK",
+        "tax_rates": []
+      }
+    ],
+    "has_more": false,
+    "total_count": 1,
+    "url": "/v1/subscription_items?subscription=sub_1ShJJoBxyBErCNcA9CGI3naK"
+  },
+  "latest_invoice": "in_1ShJJnBxyBErCNcAwc1BKhKs",
+  "livemode": false,
+  "metadata": {
+    "created_by_user_id": "cc67e78e-72ea-4f13-abc4-33218c1ff60e",
+    "office_id": "0949d359-5e1a-42f3-87da-07b40946efc0",
+    "office_name": "事務所TEST"
+  },
+  "next_pending_invoice_item_invoice": null,
+  "on_behalf_of": null,
+  "pause_collection": null,
+  "payment_settings": {
+    "payment_method_options": {
+      "acss_debit": null,
+      "bancontact": null,
+      "card": {
+        "network": null,
+        "request_three_d_secure": "automatic"
+      },
+      "customer_balance": null,
+      "konbini": null,
+      "payto": null,
+      "sepa_debit": null,
+      "us_bank_account": null
+    },
+    "payment_method_types": ["card"],
+    "save_default_payment_method": "off"
+  },
+  "pending_invoice_item_interval": null,
+  "pending_setup_intent": null,
+  "pending_update": null,
+  "plan": {
+    "id": "price_1SczlUBxyBErCNcAIQxt2zGg",
+    "object": "plan",
+    "active": true,
+    "amount": 6000,
+    "amount_decimal": "6000",
+    "billing_scheme": "per_unit",
+    "created": 1765420680,
+    "currency": "jpy",
+    "interval": "month",
+    "interval_count": 1,
+    "livemode": false,
+    "metadata": {},
+    "meter": null,
+    "nickname": null,
+    "product": "prod_TaA5aAh04fiyQQ",
+    "tiers_mode": null,
+    "transform_usage": null,
+    "trial_period_days": null,
+    "usage_type": "licensed"
+  },
+  "quantity": 1,
+  "schedule": null,
+  "start_date": 1766449155,
+  "status": "trialing",
+  "test_clock": null,
+  "transfer_data": null,
+  "trial_end": 1781827200,
+  "trial_settings": {
+    "end_behavior": {
+      "missing_payment_method": "create_invoice"
+    }
+  },
+  "trial_start": 1766449155
+}
 
-## エラー内容
 
-```
-sqlalchemy.exc.MissingGreenlet: greenlet_spawn has not been called; can't call await_only() here.
-Was IO attempted in an unexpected place?
-```
 
-**発生箇所**: `app/api/v1/endpoints/withdrawal_requests.py:304` (approve endpoint)
-**トリガー**: 退会リクエストの承認処理時
 
-## エラーログ分析
+2025-12-23 09:19:35  <--  [200] POST http://localhost:8000/api/v1/billing/webhook [evt_1ShJK5BxyBErCNcAkasKMUUQ]
+2025-12-23 09:19:41   --> customer.subscription.updated [evt_1ShJKDBxyBErCNcAwXn9G0tN]
+2025-12-23 09:19:43  <--  [200] POST http://localhost:8000/api/v1/billing/webhook [evt_1ShJKDBxyBErCNcAwXn9G0tN]
+2025-12-23 09:19:47   --> customer.subscription.updated [evt_1ShJKJBxyBErCNcAUVI3GLtV]
+2025-12-23 09:19:50  <--  [200] POST http://localhost:8000/api/v1/billing/webhook [evt_1ShJKJBxyBErCNcAUVI3GLtV]
+2025-12-23 09:20:40   --> customer.subscription.updated [evt_1ShJLABxyBErCNcAP6NzFT3S]
+2025-12-23 09:20:42  <--  [200] POST http://localhost:8000/api/v1/billing/webhook [evt_1ShJLABxyBErCNcAP6NzFT3S]
 
-```python
-File "/app/app/api/v1/endpoints/withdrawal_requests.py", line 304, in approve_withdrawal_request
-    return _to_withdrawal_response(loaded_request)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-File "/app/app/api/v1/endpoints/withdrawal_requests.py", line 38, in _to_withdrawal_response
-    request_data = request.request_data or {}
-                   ^^^^^^^^^^^^^^^^^^^^
-```
 
-## 根本原因
 
-### SQLAlchemyの非同期セッションライフサイクル問題
-
-**問題の流れ:**
-
-1. `crud_approval_request.get_by_id_with_relations(db, request_id)` でリクエストを取得
-2. この関数は**関連オブジェクト**（`requester`, `reviewer`, `office`）のみをeager load
-3. **カラム属性**（`request_data`など）は遅延読み込みのまま
-4. `await db.commit()` を実行すると、SQLAlchemyは全オブジェクトを**expired状態**にする
-5. commit後、`_to_withdrawal_response()`で`request.request_data`にアクセス
-6. SQLAlchemyが遅延読み込みを試みるが、非同期セッションコンテキストは既に終了
-7. `MissingGreenlet`エラー発生
-
-### get_by_id_with_relations の実装（問題箇所）
-
-**ファイル**: `k_back/app/crud/crud_approval_request.py:207-224`
-
-```python
-async def get_by_id_with_relations(
-    self,
-    db: AsyncSession,
-    request_id: uuid.UUID
-) -> Optional[ApprovalRequest]:
-    """IDでリクエストを取得（関連データ含む）"""
-    result = await db.execute(
-        select(self.model)
-        .where(self.model.id == request_id)
-        .options(
-            selectinload(self.model.requester),  # ← 関連オブジェクトのみロード
-            selectinload(self.model.reviewer),
-            selectinload(self.model.office)
-        )
-        # request_data などのカラム属性は遅延読み込みのまま
-    )
-    return result.scalar_one_or_none()
-```
-
-### エンドポイントの実装（問題箇所）
-
-**ファイル**: `k_back/app/api/v1/endpoints/withdrawal_requests.py:299-304`
-
-```python
-# commit前にリレーションをロード（ResourceClosedError対策）
-loaded_request = await crud_approval_request.get_by_id_with_relations(db, request_id)
-
-await db.commit()  # ← ここでオブジェクトがexpiredになる
-
-return _to_withdrawal_response(loaded_request)  # ← request_dataアクセス時にエラー
-```
-
-## 解決策
-
-### commit前に必要な属性をメモリにロード
-
-**修正内容**: 3つのエンドポイント（create, approve, reject）で同じ修正を適用
-
-**ファイル**: `k_back/app/api/v1/endpoints/withdrawal_requests.py`
-- Lines 142-149 (create endpoint)
-- Lines 299-306 (approve endpoint)
-- Lines 374-381 (reject endpoint)
-
-**修正前**:
-```python
-# commit前にリレーションをロード（ResourceClosedError対策）
-loaded_request = await crud_approval_request.get_by_id_with_relations(db, request_id)
-
-await db.commit()
-
-return _to_withdrawal_response(loaded_request)
-```
-
-**修正後（ベストプラクティス版）**:
-```python
-# commit前にリレーションをロード
-loaded_request = await crud_approval_request.get_by_id_with_relations(db, request_id)
-
-# commit前にレスポンスデータを生成（MissingGreenletエラー対策）
-response_data = _to_withdrawal_response(loaded_request)
-
-# commitはレスポンス生成後に実行
-await db.commit()
-
-return response_data
-```
-
-**アプローチの選択理由**:
-- SQLAlchemyベストプラクティス: commit前にシリアライズ
-- 保守性が高い: 明示的でわかりやすい
-- FastAPI標準パターン: Pydanticモデル化してからcommit
-
-### なぜこの修正が有効か
-
-1. **属性アクセスによる強制ロード**: `_ = loaded_request.request_data` により、commit前に属性がメモリに読み込まれる
-2. **メモリ内データの保持**: commit後もオブジェクトはメモリ内のデータを保持しているため、アクセス可能
-3. **非同期コンテキスト不要**: メモリ内のデータにアクセスするだけなので、非同期セッションは不要
-
-## 検証結果
-
-### テスト実行
-
-```bash
-docker compose exec backend pytest tests/api/v1/test_withdrawal_requests.py -v
-```
-
-**結果**: ✅ **17 passed in 108.72s**
-
-全テスト成功:
-- test_create_withdrawal_request_as_owner
-- test_approve_withdrawal_request_as_app_admin ← このテストで以前エラーが発生
-- test_reject_withdrawal_request_as_app_admin
-- その他14テスト
-
-## SQLAlchemyベストプラクティス
-
-### 非同期セッションでの注意点
-
-1. **commit後のアクセスは危険**: commit後にオブジェクトの属性にアクセスすると、遅延読み込みが発生する可能性がある
-2. **必要な属性は事前ロード**: commit前に必要な全ての属性・関連オブジェクトをロードする
-3. **Eager Loading推奨**: `selectinload()`, `joinedload()` などで関連データを明示的にロード
-4. **属性の事前アクセス**: 遅延読み込みされる属性は、commit前に明示的にアクセスしてメモリにロード
-
-### 代替案（今回は採用せず）
-
-1. **expire_on_commit=False**: セッション作成時に設定（グローバルな影響があるため非推奨）
-2. **db.expunge()**: オブジェクトをセッションから切り離す（管理が複雑になる）
-3. **全属性のEager Loading**: `.options(load_only(...))` で全属性を明示的にロード（冗長）
-
-## 類似エラーとの比較
-
-### ResourceClosedError vs MissingGreenlet
-
-| エラー | 原因 | 発生タイミング |
-|--------|------|--------------|
-| **ResourceClosedError** | トランザクション/接続が閉じた後にクエリ実行 | commit後の新規クエリ |
-| **MissingGreenlet** | 非同期コンテキスト外で非同期操作を試行 | commit後の遅延読み込み |
-
-両者とも**「commit後のデータアクセス」**が根本原因だが、エラーの種類が異なる。
-
-## 影響範囲
-
-- **修正箇所**: `withdrawal_requests.py` の3つのエンドポイント
-- **影響なし**: 他のファイルは修正不要
-- **下位互換性**: 完全に保たれている
-
-## 優先度
-
-**高**: 退会処理の承認・却下機能が完全に動作不能だった
-
----
-
-**調査日**: 2025-11-30
-**調査者**: Claude Code
-**ステータス**: 解決済み
-**関連**: 1Lerror.md (フロントエンドAPI契約), 3memox.md (テスト隔離問題)
+2025-12-23 00:19:49,452 - app.services.billing_service - INFO - [Webhook:evt_1ShJKJBxyBErCNcAUVI3GLtV] Scheduled cancellation set for 2026-06-19 00:00:00+00:00
+2025-12-23 00:19:49,681 - app.services.billing_service - INFO - [Webhook:evt_1ShJKJBxyBErCNcAUVI3GLtV] Subscription set to canceling - cancel_at_period_end=False, cancel_at=1781827200
+2025-12-23 00:20:40,739 - app.services.billing_service - INFO - [Webhook:evt_1ShJLABxyBErCNcAP6NzFT3S] Subscription updated - customer_id=cus_TecYgxboEmne6z, cancel_at_period_end=True, cancel_at=1781827200, status=trialing
+2025-12-23 00:20:41,225 - app.services.billing_service - INFO - [Webhook:evt_1ShJLABxyBErCNcAP6NzFT3S] Current billing_status=BillingStatus.canceling
+2025-12-23 00:20:41,225 - app.services.billing_service - INFO - [Webhook:evt_1ShJLABxyBErCNcAP6NzFT3S] Scheduled cancellation set for 2026-06-19 00:00:00+00:00
+2025-12-23 00:20:41,459 - app.services.billing_service - INFO - [Webhook:evt_1ShJLABxyBErCNcAP6NzFT3S] Subscription set to canceling - cancel_at_period_end=True, cancel_at=1781827200

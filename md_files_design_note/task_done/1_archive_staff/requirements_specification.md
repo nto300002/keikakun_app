@@ -962,33 +962,15 @@ class TestArchiveLifecycle:
 
 ### B. 実装チェックリスト
 
-- [x] モデル作成（`app/models/archived_staff.py`）
-- [x] マイグレーション作成・実行
-- [x] CRUD作成（`app/crud/crud_archived_staff.py`）
-  - [x] create_from_staff - アーカイブ作成
-  - [x] get - ID取得
-  - [x] get_by_original_staff_id - 元スタッフIDで取得
-  - [x] get_multi - リスト取得（フィルタリング・ページネーション対応）
-  - [x] get_expired_archives - 期限切れアーカイブ取得
-  - [x] delete_expired_archives - 期限切れアーカイブ削除
-- [x] スタッフ削除エンドポイントにアーカイブ作成処理を追加
-- [x] Withdrawal サービスにアーカイブ作成処理を追加（staff_withdrawal, office_withdrawal）
-- [x] cleanup_service にアーカイブ削除処理を追加（※既に実装済みを確認）
-- [x] API エンドポイント作成（app_admin専用）
-  - [x] GET /api/v1/admin/archived-staffs - リスト取得
-  - [x] GET /api/v1/admin/archived-staffs/{id} - 詳細取得
-  - [x] スキーマ定義作成（app/schemas/archived_staff.py）
-  - [x] APIルーター登録（app/api/v1/api.py）
-- [x] APIテスト作成（tests/api/v1/test_archived_staffs.py）
-  - [x] リスト取得テスト（正常系）
-  - [x] office_idフィルタリングテスト
-  - [x] archive_reasonフィルタリングテスト
-  - [x] ページネーションテスト
-  - [x] 詳細取得テスト（正常系）
-  - [x] 403 Forbiddenテスト（非app_admin）
-  - [x] 404 Not Foundテスト
-- [ ] ユニットテスト作成（CRUD層）
-- [ ] 統合テスト作成（アーカイブ作成フロー全体）
+- [ ] モデル作成（`app/models/archived_staff.py`）
+- [ ] マイグレーション作成・実行
+- [ ] CRUD作成（`app/crud/crud_archived_staff.py`）
+- [ ] スタッフ削除エンドポイントにアーカイブ作成処理を追加
+- [ ] Withdrawal サービスにアーカイブ作成処理を追加
+- [ ] cleanup_service にアーカイブ削除処理を追加
+- [ ] API エンドポイント作成（app_admin専用）
+- [ ] ユニットテスト作成
+- [ ] 統合テスト作成
 - [ ] E2Eテスト作成
 - [ ] プライバシーポリシー更新
 - [ ] ドキュメント更新
