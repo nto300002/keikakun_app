@@ -51,6 +51,11 @@ jobs:
           MAIL_PORT: "587"
           # ライブラリの仕様に合わせ "1" (True) を使用
           MAIL_DEBUG: "1"
+          # Stripe設定
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_PRICE_ID: ${{ secrets.STRIPE_PRICE_ID }}
         run: pytest
 
       - name: Authenticate to Google Cloud
@@ -70,5 +75,5 @@ jobs:
         run: |
           gcloud builds submit \
             --config cloudbuild.yml \
-            --substitutions=_PROD_DATABASE_URL="${{ secrets.PROD_DATABASE_URL }}",_PROD_SECRET_KEY="${{ secrets.PROD_SECRET_KEY }}",_AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}",_AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}",_AWS_REGION="${{ secrets.AWS_REGION }}",_S3_ACCESS_KEY="${{ secrets.S3_ACCESS_KEY }}",_S3_SECRET_KEY="${{ secrets.S3_SECRET_KEY }}",_S3_REGION="${{ secrets.S3_REGION }}",_S3_BUCKET_NAME="${{ secrets.S3_BUCKET_NAME }}",_SENDER_EMAIL="${{ secrets.SENDER_EMAIL }}",_MAIL_USERNAME="${{ secrets.MAIL_USERNAME }}",_MAIL_PASSWORD="${{ secrets.MAIL_PASSWORD }}",_MAIL_SERVER="${{ secrets.MAIL_SERVER }}",_MAIL_PORT="${{ secrets.MAIL_PORT }}",_FRONTEND_URL="${{ secrets.FRONTEND_URL }}",_CALENDAR_ENCRYPTION_KEY="${{ secrets.CALENDAR_ENCRYPTION_KEY }}",_ENVIRONMENT="${{ secrets.ENVIRONMENT }}",_COOKIE_SECURE="${{ secrets.COOKIE_SECURE }}",_COOKIE_DOMAIN="${{ secrets.COOKIE_DOMAIN }}",_COOKIE_SAMESITE="${{ secrets.COOKIE_SAMESITE }}",_PASSWORD_RESET_TOKEN_EXPIRE_MINUTES="${{ secrets.PASSWORD_RESET_TOKEN_EXPIRE_MINUTES }}",_RATE_LIMIT_FORGOT_PASSWORD="${{ secrets.RATE_LIMIT_FORGOT_PASSWORD }}",_RATE_LIMIT_RESEND_EMAIL="${{ secrets.RATE_LIMIT_RESEND_EMAIL }}" \
+            --substitutions=_PROD_DATABASE_URL="${{ secrets.PROD_DATABASE_URL }}",_PROD_SECRET_KEY="${{ secrets.PROD_SECRET_KEY }}",_AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}",_AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}",_AWS_REGION="${{ secrets.AWS_REGION }}",_S3_ACCESS_KEY="${{ secrets.S3_ACCESS_KEY }}",_S3_SECRET_KEY="${{ secrets.S3_SECRET_KEY }}",_S3_REGION="${{ secrets.S3_REGION }}",_S3_BUCKET_NAME="${{ secrets.S3_BUCKET_NAME }}",_SENDER_EMAIL="${{ secrets.SENDER_EMAIL }}",_MAIL_USERNAME="${{ secrets.MAIL_USERNAME }}",_MAIL_PASSWORD="${{ secrets.MAIL_PASSWORD }}",_MAIL_SERVER="${{ secrets.MAIL_SERVER }}",_MAIL_PORT="${{ secrets.MAIL_PORT }}",_FRONTEND_URL="${{ secrets.FRONTEND_URL }}",_CALENDAR_ENCRYPTION_KEY="${{ secrets.CALENDAR_ENCRYPTION_KEY }}",_ENVIRONMENT="${{ secrets.ENVIRONMENT }}",_COOKIE_SECURE="${{ secrets.COOKIE_SECURE }}",_COOKIE_DOMAIN="${{ secrets.COOKIE_DOMAIN }}",_COOKIE_SAMESITE="${{ secrets.COOKIE_SAMESITE }}",_PASSWORD_RESET_TOKEN_EXPIRE_MINUTES="${{ secrets.PASSWORD_RESET_TOKEN_EXPIRE_MINUTES }}",_RATE_LIMIT_FORGOT_PASSWORD="${{ secrets.RATE_LIMIT_FORGOT_PASSWORD }}",_RATE_LIMIT_RESEND_EMAIL="${{ secrets.RATE_LIMIT_RESEND_EMAIL }}",_STRIPE_SECRET_KEY="${{ secrets.STRIPE_SECRET_KEY }}",_STRIPE_PUBLISHABLE_KEY="${{ secrets.STRIPE_PUBLISHABLE_KEY }}",_STRIPE_WEBHOOK_SECRET="${{ secrets.STRIPE_WEBHOOK_SECRET }}",_STRIPE_PRICE_ID="${{ secrets.STRIPE_PRICE_ID }}" \
             .
