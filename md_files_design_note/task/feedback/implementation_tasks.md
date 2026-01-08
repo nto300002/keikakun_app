@@ -1402,6 +1402,311 @@ const getStepLabel = (stepType: string) => {
 
 ---
 
-**最終更新**: 2026-01-08 14:50（フロントエンド調査完了）
+## 🔄 Task 5: サイクル作成トリガーの変更調査
+
+### 📋 要件
+
+**変更内容**: 新サイクルの作成トリガーを「個別支援計画書本案」から「モニタリング」に変更
+
+**現状**:
+- ❌ `final_plan_signed_pdf` (個別支援計画書本案) アップロード時に次のサイクルが作成される
+- これにより、モニタリング完了前に次のサイクルが表示されてしまう
+
+**理想**:
+- ✅ `monitoring_report_pdf` (モニタリング報告書) アップロード時に次のサイクルを作成
+- モニタリング完了後に新しいサイクルを開始する自然な流れ
+
+### 📊 現状仕様の調査結果
+
+#### 1. サイクル作成トリガーの実装箇所
+
+**ファイル**: `k_back/app/services/support_plan_service.py`
+
+**トリガー検出部分** (Lines 306-337):
+```python
+if deliverable_in.deliverable_type == DeliverableType.final_plan_signed_pdf:
+    logger.info(f"[FINAL_PLAN] Detected final_plan_signed_pdf upload for cycle {cycle.id}")
+
+    # ステータス更新をデータベースに反映させるため、ここでflushを呼ぶ
+    await db.flush()
+
+    # cycle_numberが現在のサイクルより大きいサイクルがあるか確認
+    future_cycle_stmt = select(SupportPlanCycle).where(
+        SupportPlanCycle.welfare_recipient_id == cycle.welfare_recipient_id,
+        SupportPlanCycle.cycle_number > cycle.cycle_number
+    )
+    future_cycle_result = await db.execute(future_cycle_stmt)
+    has_future_cycles = future_cycle_result.scalar_one_or_none() is not None
+
+    logger.info(f"[FINAL_PLAN] has_future_cycles={has_future_cycles}")
+
+    # 既に次のサイクルが存在する場合は、未来のサイクルを削除して再定義
+    if has_future_cycles:
+        logger.info(f"[FINAL_PLAN] Resetting future cycles for recipient {cycle.welfare_recipient_id}")
+        await SupportPlanService._reset_future_cycles(
+            db,
+            welfare_recipient_id=cycle.welfare_recipient_id,
+            current_cycle_number=cycle.cycle_number
+        )
+        logger.info(f"[FINAL_PLAN] Future cycles reset completed")
+
+    # 新しいサイクルを作成
+    logger.info(f"[FINAL_PLAN] Creating new cycle from final_plan for cycle {cycle.id}")
+    await SupportPlanService._create_new_cycle_from_final_plan(
+        db, old_cycle=cycle, final_plan_completed_at=current_status.completed_at
+    )
+    logger.info(f"[FINAL_PLAN] New cycle creation completed")
+```
+
+#### 2. サイクル作成メソッド
+
+**メソッド名**: `_create_new_cycle_from_final_plan` (Lines 72-169)
+
+**処理内容**:
+```python
+async def _create_new_cycle_from_final_plan(
+    db: AsyncSession,
+    old_cycle: SupportPlanCycle,
+    final_plan_completed_at: datetime.datetime
+):
+    """最終計画書アップロード時に新しいサイクルを作成する"""
+
+    # 1. 現在のサイクルを「最新ではない」に更新
+    old_cycle.is_latest_cycle = False
+
+    # 2. 新しいサイクルを作成
+    today = datetime.date.today()
+    new_cycle = SupportPlanCycle(
+        welfare_recipient_id=old_cycle.welfare_recipient_id,
+        office_id=old_cycle.office_id,
+        plan_cycle_start_date=today,
+        next_renewal_deadline=today + datetime.timedelta(days=180),
+        is_latest_cycle=True,
+        cycle_number=old_cycle.cycle_number + 1
+    )
+
+    # 3. 新しいサイクル用の5つのステータスを作成
+    for i, step_type in enumerate(CYCLE_STEPS):
+        due_date = None
+
+        if step_type == SupportPlanStep.monitoring:
+            # モニタリング期限のデフォルトは7日
+            monitoring_deadline = 7
+            new_cycle.monitoring_deadline = monitoring_deadline
+            due_date = (final_plan_completed_at + datetime.timedelta(days=monitoring_deadline)).date()
+
+        new_status = SupportPlanStatus(
+            plan_cycle_id=new_cycle.id,
+            welfare_recipient_id=old_cycle.welfare_recipient_id,
+            office_id=old_cycle.office_id,
+            step_type=step_type,
+            is_latest_status=(i == 0),  # 最初のステップ(assessment)を最新にする
+            due_date=due_date
+        )
+        db.add(new_status)
+
+    # 4. カレンダーイベントを作成
+    # - 更新期限イベント（150日目～180日目）
+    # - モニタリング期限イベント（cycle_number >= 2の場合、1日目～7日目）
+    await calendar_service.create_renewal_deadline_events(...)
+    await calendar_service.create_monitoring_deadline_events(...)
+```
+
+#### 3. 未来サイクルのリセットメソッド
+
+**メソッド名**: `_reset_future_cycles` (Lines 33-68)
+
+**目的**: 既存の未来のサイクルを削除して、新しいサイクルを再定義する
+
+**処理内容**:
+```python
+async def _reset_future_cycles(
+    db: AsyncSession,
+    welfare_recipient_id: UUID,
+    current_cycle_number: int
+):
+    """指定されたサイクル番号より大きいサイクルを削除し、最新のサイクルを再定義する"""
+
+    # 現在のサイクル番号より大きいサイクルを削除
+    future_cycles = await db.execute(
+        select(SupportPlanCycle).where(
+            SupportPlanCycle.welfare_recipient_id == welfare_recipient_id,
+            SupportPlanCycle.cycle_number > current_cycle_number
+        ).options(selectinload(SupportPlanCycle.statuses))
+    )
+
+    for cycle in future_cycles.scalars().all():
+        # 関連するステータスを削除
+        for status in cycle.statuses:
+            await db.delete(status)
+        # サイクルを削除
+        await db.delete(cycle)
+
+    # 最新のサイクルを再定義
+    # ...
+```
+
+### 🎯 変更が必要な箇所
+
+#### 1. トリガー条件の変更
+
+**現状**:
+```python
+if deliverable_in.deliverable_type == DeliverableType.final_plan_signed_pdf:
+    # サイクル作成ロジック
+```
+
+**変更後**:
+```python
+if deliverable_in.deliverable_type == DeliverableType.monitoring_report_pdf:
+    # サイクル作成ロジック
+```
+
+#### 2. メソッド名の変更（オプション）
+
+**現状**: `_create_new_cycle_from_final_plan`
+
+**推奨**: `_create_new_cycle_from_monitoring` または `_create_new_cycle`
+
+**理由**: メソッド名が「final_plan」を含むため、モニタリングトリガーには不適切
+
+#### 3. カレンダーイベントのタイミング調整
+
+**現状**: `final_plan_completed_at` を基準にモニタリング期限を計算
+
+**変更後**: `monitoring_completed_at` を基準に次のサイクルの期限を計算
+
+**影響**:
+- 新しいサイクルのモニタリング期限は、前サイクルのモニタリング完了日 + 7日
+- 更新期限は、前サイクルのモニタリング完了日 + 180日
+
+#### 4. ログメッセージの更新
+
+**現状**:
+```python
+logger.info(f"[FINAL_PLAN] Detected final_plan_signed_pdf upload for cycle {cycle.id}")
+logger.info(f"[FINAL_PLAN] Creating new cycle from final_plan for cycle {cycle.id}")
+```
+
+**変更後**:
+```python
+logger.info(f"[MONITORING] Detected monitoring_report_pdf upload for cycle {cycle.id}")
+logger.info(f"[MONITORING] Creating new cycle from monitoring for cycle {cycle.id}")
+```
+
+### ⚠️ 影響範囲の分析
+
+#### 1. テストへの影響
+
+**影響を受けるテストファイル**:
+- `tests/test_support_plan_cycle.py`
+  - `test_upload_final_plan_creates_new_cycle` の変更が必要
+  - テスト名を `test_upload_monitoring_creates_new_cycle` に変更
+  - アサーション条件を変更（final_plan → monitoring）
+
+**検証項目**:
+- モニタリングPDFアップロード後に新サイクルが作成されるか
+- final_planアップロード後に新サイクルが作成**されない**か
+- 新サイクルのcycle_numberが正しく増加するか
+- カレンダーイベントが正しく作成されるか
+
+#### 2. カレンダーサービスへの影響
+
+**影響**: 軽微
+
+**理由**:
+- カレンダーイベント作成APIは変更不要
+- 呼び出しタイミングが変わるだけ（final_plan時 → monitoring時）
+- イベントの内容は同じ（更新期限、モニタリング期限）
+
+#### 3. フロントエンドへの影響
+
+**影響**: なし
+
+**理由**:
+- フロントエンドはAPIのレスポンスを表示するだけ
+- サイクル作成のトリガーが変わっても、表示ロジックは同じ
+- ユーザーはモニタリング完了後に自然に次のサイクルを見ることになる
+
+### 📝 実装手順
+
+#### Phase 1: バックエンド変更
+
+1. **トリガー条件の変更**
+   - `support_plan_service.py` Line 306 の条件を変更
+   - `final_plan_signed_pdf` → `monitoring_report_pdf`
+
+2. **メソッド名の変更**
+   - `_create_new_cycle_from_final_plan` → `_create_new_cycle_from_monitoring`
+   - パラメータ名を変更: `final_plan_completed_at` → `monitoring_completed_at`
+
+3. **ログメッセージの更新**
+   - `[FINAL_PLAN]` → `[MONITORING]`
+   - ログ内容を適切に変更
+
+4. **docstringの更新**
+   - メソッドの説明を「モニタリングアップロード時」に変更
+
+#### Phase 2: テスト変更
+
+1. **テスト名の変更**
+   - `test_upload_final_plan_creates_new_cycle` → `test_upload_monitoring_creates_new_cycle`
+
+2. **テストロジックの変更**
+   - final_planのアップロード → monitoringのアップロード
+   - アサーション条件を調整
+
+3. **新規テストの追加**
+   - `test_upload_final_plan_does_not_create_new_cycle`（final_planアップロード時に新サイクルが作成されないことを確認）
+
+#### Phase 3: 検証
+
+1. **ユニットテスト実行**
+   ```bash
+   docker exec keikakun_app-backend-1 pytest tests/test_support_plan_cycle.py -v
+   ```
+
+2. **全テスト実行**
+   ```bash
+   docker exec keikakun_app-backend-1 pytest tests/ -v
+   ```
+
+3. **手動検証**
+   - モニタリングPDFアップロード後の動作確認
+   - カレンダーイベント作成の確認
+   - フロントエンドでの表示確認
+
+### 📊 見積もり
+
+| タスク | 見積もり |
+|--------|----------|
+| バックエンド変更 | 30分 |
+| テスト変更 | 30分 |
+| テスト実行・デバッグ | 30分 |
+| 手動検証 | 30分 |
+| **合計** | **2時間** |
+
+### ✅ 期待される結果
+
+**変更前**:
+1. アセスメント → 計画作成 → 担当者会議 → **個別支援計画書本案** ✅
+2. **→ 新サイクル作成** 🆕
+3. モニタリング ✅
+4. サイクル2のアセスメント開始
+
+**変更後**:
+1. アセスメント → 計画作成 → 担当者会議 → 個別支援計画書本案 ✅
+2. モニタリング ✅
+3. **→ 新サイクル作成** 🆕
+4. サイクル2のアセスメント開始
+
+**ユーザー体験の改善**:
+- より自然な流れ: モニタリング完了 → 次のサイクル開始
+- 画面の混乱を防止: モニタリング中に次のサイクルが表示されない
+- 期限管理の明確化: 現在のサイクルを完全に終了してから次へ
+
+---
+
+**最終更新**: 2026-01-08 15:10（サイクル作成トリガー調査完了）
 **レビュー**: 未実施
 **承認**: 未承認
