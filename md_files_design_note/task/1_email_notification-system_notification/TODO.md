@@ -3,7 +3,7 @@
 ## 進捗状況
 - 開始日: 2026-01-13
 - 最終更新: 2026-01-13
-- 進捗: 37/73 タスク完了 (Phase 1-5完了 ✅)
+- 進捗: 46/73 タスク完了 (Phase 1-6完了 ✅)
 
 ---
 
@@ -141,17 +141,18 @@
 ## Phase 6: 統合テスト
 
 ### 6.1 ローカル環境での動作確認
-- [ ] Dockerコンテナを起動
+- [x] Dockerコンテナを起動
   ```bash
   docker-compose up -d
   ```
-- [ ] スケジューラーが起動しているか確認
+- [x] スケジューラーが起動しているか確認
   ```bash
   docker logs keikakun_app-backend-1 | grep "DEADLINE_NOTIFICATION_SCHEDULER"
   ```
+  結果: ✅ "Deadline notification scheduler started successfully"
 
 ### 6.2 dry_runモードでのテスト
-- [ ] dry_runモードでバッチ処理を手動実行
+- [x] dry_runモードでバッチ処理を手動実行
   ```bash
   docker exec keikakun_app-backend-1 python3 -c "
   import asyncio
@@ -166,13 +167,21 @@
   asyncio.run(test())
   "
   ```
-- [ ] ログ出力を確認
+  結果: ✅ Would send 2 emails
+- [x] ログ出力を確認
+  結果: ✅ 2つの事業所、2件の更新期限アラート、2件のアセスメント未完了アラート検出
 
 ### 6.3 実際のメール送信テスト（開発環境）
-- [ ] テスト用の事業所・スタッフ・利用者データを作成
-- [ ] バッチ処理を手動実行（dry_run=False）
-- [ ] メールが正しく送信されることを確認
-- [ ] メールのHTML表示を確認（Gmail, Outlook等）
+- [x] テスト用の事業所・スタッフ・利用者データを作成
+  結果: ✅ 既存のテストデータを使用（事務所TEST）
+- [x] バッチ処理を手動実行（dry_run=False）
+  結果: ✅ 2通のメール送信成功
+- [x] メールが正しく送信されることを確認
+  結果: ✅ kanataso20@gmail.com, ysnt315@gmail.com に送信完了
+- [x] メールのHTML表示を確認（Gmail, Outlook等）
+  結果: ✅ HTMLメール正常表示確認
+- [x] メールテンプレート修正（サイクル番号削除、URL変更）
+  結果: ✅ /dashboard に変更、サイクルカラム削除
 
 ---
 
