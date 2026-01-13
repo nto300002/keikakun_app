@@ -3,7 +3,7 @@
 ## 進捗状況
 - 開始日: 2026-01-13
 - 最終更新: 2026-01-13
-- 進捗: 30/73 タスク完了 (Phase 1-4完了 ✅)
+- 進捗: 37/73 タスク完了 (Phase 1-5完了 ✅)
 
 ---
 
@@ -117,20 +117,20 @@
 ## Phase 5: スケジューラー実装
 
 ### 5.1 スケジューラー作成
-- [ ] `app/scheduler/deadline_notification_scheduler.py` を作成
-  - [ ] インポート文
-  - [ ] スケジューラーインスタンス作成
-  - [ ] `scheduled_send_alerts()` 関数実装
-  - [ ] `start()` 関数実装
-  - [ ] `shutdown()` 関数実装
+- [x] `app/scheduler/deadline_notification_scheduler.py` を作成
+  - [x] インポート文
+  - [x] スケジューラーインスタンス作成
+  - [x] `scheduled_send_alerts()` 関数実装
+  - [x] `start()` 関数実装
+  - [x] `shutdown()` 関数実装
 
 ### 5.2 main.py 修正
-- [ ] `app/main.py` にインポート追加
+- [x] `app/main.py` にインポート追加
   ```python
   from app.scheduler.deadline_notification_scheduler import deadline_notification_scheduler
   ```
-- [ ] `startup_event()` にスケジューラー起動処理を追加
-- [ ] `shutdown_event()` にスケジューラー停止処理を追加
+- [x] `startup_event()` にスケジューラー起動処理を追加
+- [x] `shutdown_event()` にスケジューラー停止処理を追加
 
 ### 5.3 スケジューラーテスト作成
 - [ ] `tests/scheduler/test_deadline_notification_scheduler.py` を作成
