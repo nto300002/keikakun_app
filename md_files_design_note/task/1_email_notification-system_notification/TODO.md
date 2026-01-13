@@ -3,7 +3,7 @@
 ## 進捗状況
 - 開始日: 2026-01-13
 - 最終更新: 2026-01-13
-- 進捗: 46/73 タスク完了 (Phase 1-6完了 ✅)
+- 進捗: 58/85 タスク完了 (Phase 1-6.5完了 ✅)
 
 ---
 
@@ -182,6 +182,41 @@
   結果: ✅ HTMLメール正常表示確認
 - [x] メールテンプレート修正（サイクル番号削除、URL変更）
   結果: ✅ /dashboard に変更、サイクルカラム削除
+
+---
+
+## Phase 6.5: セキュリティ強化（DoS対策・監査ログ）
+
+### 6.5.1 DoS対策実装（TDD）
+- [x] テスト作成: `tests/tasks/test_deadline_notification_rate_limit.py`
+  - [x] `test_rate_limit_enforced` - 並列送信数制限（最大5件）のテスト
+  - [x] `test_timeout_on_slow_email` - 30秒タイムアウトのテスト
+  - [x] `test_delay_between_emails` - 100ms送信間隔のテスト
+- [x] テスト実行（Red）- 2 failed (timeout, delay)
+- [x] 実装
+  - [x] `asyncio.Semaphore(5)` で並列送信数制限
+  - [x] `asyncio.wait_for(timeout=30.0)` でタイムアウト設定
+  - [x] `asyncio.sleep(0.1)` で送信間隔遅延
+- [x] テスト実行（Green）- 3 passed ✅
+
+### 6.5.2 監査ログ実装（TDD）
+- [x] テスト作成: `tests/tasks/test_deadline_notification_audit.py`
+  - [x] `test_audit_log_on_email_sent` - メール送信時に監査ログ作成
+  - [x] `test_audit_log_contains_required_fields` - 必要フィールド確認
+  - [x] `test_audit_log_on_dry_run_skip` - dry_runモードでは作成しない
+- [x] テスト実行（Red）- create_log not called
+- [x] 実装
+  - [x] `crud.audit_log.create_log()` 呼び出し
+  - [x] action: "deadline_notification_sent"
+  - [x] actor_role: "system"
+  - [x] target_type: "email_notification"
+  - [x] details: recipient_email, office_name, alert_count
+- [x] テスト実行（Green）- test_audit_log_on_dry_run_skip passed ✅
+
+### 6.5.3 コミット＆プッシュ
+- [x] 変更をステージング
+- [x] コミット "feat: DoS対策と監査ログ記録を実装（TDD）"
+- [x] プッシュ origin/feature/issue-email_notification-system_notification
 
 ---
 
