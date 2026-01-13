@@ -3,7 +3,7 @@
 ## 進捗状況
 - 開始日: 2026-01-13
 - 最終更新: 2026-01-13
-- 進捗: 58/85 タスク完了 (Phase 1-6.5完了 ✅)
+- 進捗: 84/96 タスク完了 (Phase 1-6.7完了 ✅)
 
 ---
 
@@ -216,6 +216,69 @@
 ### 6.5.3 コミット＆プッシュ
 - [x] 変更をステージング
 - [x] コミット "feat: DoS対策と監査ログ記録を実装（TDD）"
+- [x] プッシュ origin/feature/issue-email_notification-system_notification
+
+---
+
+## Phase 6.6: リトライロジック実装（TDD）
+
+### 6.6.1 テスト作成
+- [x] `tests/tasks/test_deadline_notification_retry.py` を作成
+  - [x] `test_retry_on_temporary_failure` - 一時的失敗時のリトライ（3回試行）
+  - [x] `test_max_retries_exceeded` - 最大リトライ回数超過
+  - [x] `test_exponential_backoff` - 指数バックオフ検証（2秒、4秒...）
+
+### 6.6.2 テスト実行（Red）
+- [x] テスト実行して失敗確認 - AssertionError: Expected 3 attempts, got 1
+
+### 6.6.3 実装
+- [x] `requirements.txt` に `tenacity>=8.2.0` 追加
+- [x] `_send_email_with_retry()` 関数作成
+  - [x] `@retry` デコレータ適用
+  - [x] `stop_after_attempt(3)` - 最大3回試行
+  - [x] `wait_exponential(multiplier=1, min=2, max=10)` - 指数バックオフ
+  - [x] `before_sleep_log(logger, logging.WARNING)` - リトライ時ログ出力
+- [x] メール送信部分で `_send_email_with_retry()` を呼び出し
+
+### 6.6.4 テスト実行（Green）
+- [x] すべてのリトライテストがパス ✅
+  - test_retry_on_temporary_failure ✅
+  - test_max_retries_exceeded ✅
+  - test_exponential_backoff ✅
+
+---
+
+## Phase 6.7: PII保護＆タイムゾーン統一（TDD）
+
+### 6.7.1 PII保護実装
+- [x] テスト作成: `tests/utils/test_privacy_utils.py`
+  - [x] `test_mask_email_standard` - 標準メールマスキング
+  - [x] `test_mask_email_short` - 短いメールマスキング
+  - [x] `test_mask_email_long_local_part` - 長いローカル部分
+  - [x] `test_mask_email_none` - None処理
+  - [x] `test_mask_email_invalid` - 不正形式処理
+  - [x] `test_mask_name_full` - フルネームマスキング
+  - [x] `test_mask_name_single` - 単一名前マスキング
+  - [x] `test_mask_name_none` - None処理
+- [x] テスト実行（Red）- ModuleNotFoundError
+- [x] 実装: `app/utils/privacy_utils.py`
+  - [x] `mask_email()` 関数: test@example.com → t***@example.com
+  - [x] `mask_name()` 関数: 山田 太郎 → 山田 *
+- [x] テスト実行（Green）- 8 passed ✅
+- [x] ログメッセージにマスキング適用
+  - [x] dry_runログ
+  - [x] 成功ログ
+  - [x] タイムアウトログ
+  - [x] エラーログ
+
+### 6.7.2 タイムゾーン統一
+- [x] `date.today()` → `datetime.now(timezone.utc).date()` に変更
+- [x] Cloud Runタイムゾーン依存の排除
+
+### 6.7.3 テスト＆コミット
+- [x] 既存テストがすべてパスすることを確認 ✅
+- [x] 変更をステージング
+- [x] コミット "feat: リトライロジック・PII保護・タイムゾーン統一を実装（TDD）"
 - [x] プッシュ origin/feature/issue-email_notification-system_notification
 
 ---
