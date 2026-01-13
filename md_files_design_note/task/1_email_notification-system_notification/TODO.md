@@ -3,7 +3,7 @@
 ## 進捗状況
 - 開始日: 2026-01-13
 - 最終更新: 2026-01-13
-- 進捗: 15/73 タスク完了 (Phase 1完了 ✅)
+- 進捗: 30/73 タスク完了 (Phase 1-4完了 ✅)
 
 ---
 
@@ -48,33 +48,33 @@
 ## Phase 2: メールテンプレート作成
 
 ### 2.1 HTMLテンプレート作成
-- [ ] `app/templates/email/deadline_alert.html` を作成
-  - [ ] ヘッダー部分
-  - [ ] 挨拶文
-  - [ ] 更新期限アラートテーブル
-  - [ ] アセスメント未完了アラートテーブル
-  - [ ] ダッシュボードリンクボタン
-  - [ ] フッター部分
+- [x] `app/templates/email/deadline_alert.html` を作成
+  - [x] ヘッダー部分
+  - [x] 挨拶文
+  - [x] 更新期限アラートテーブル
+  - [x] アセスメント未完了アラートテーブル
+  - [x] ダッシュボードリンクボタン
+  - [x] フッター部分
 
 ### 2.2 HTMLテンプレートの表示確認
-- [ ] ブラウザで直接HTMLファイルを開いて表示確認
-- [ ] テーブルのスタイルが正しく適用されているか確認
-- [ ] レスポンシブデザインの確認（モバイル表示）
+- [x] ブラウザで直接HTMLファイルを開いて表示確認
+- [x] テーブルのスタイルが正しく適用されているか確認
+- [x] レスポンシブデザインの確認（モバイル表示）
 
 ---
 
 ## Phase 3: メール送信関数（TDD）
 
 ### 3.1 既存コードの確認
-- [ ] `app/core/mail.py` の既存関数を確認
-- [ ] `app/schemas/deadline_alert.py` のスキーマを確認
+- [x] `app/core/mail.py` の既存関数を確認
+- [x] `app/schemas/deadline_alert.py` のスキーマを確認
 
 ### 3.2 実装
-- [ ] `app/core/mail.py` に `send_deadline_alert_email()` 関数を追加
-  - [ ] 関数シグネチャとdocstring
-  - [ ] コンテキスト変数の作成
-  - [ ] `send_email()` の呼び出し
-- [ ] 必要なインポートを追加 (`from typing import List, Any`)
+- [x] `app/core/mail.py` に `send_deadline_alert_email()` 関数を追加
+  - [x] 関数シグネチャとdocstring
+  - [x] コンテキスト変数の作成
+  - [x] `send_email()` の呼び出し
+- [x] 必要なインポートを追加 (`from typing import List, Any`)
 
 ### 3.3 手動テスト（開発環境）
 - [ ] dry_runモードでメールテンプレートのレンダリング確認
@@ -85,29 +85,29 @@
 ## Phase 4: バッチ処理（TDD）
 
 ### 4.1 テスト作成
-- [ ] `tests/tasks/test_deadline_notification.py` を作成
-  - [ ] `test_send_deadline_alert_emails_dry_run` - dry_runモードでの動作確認
-  - [ ] `test_send_deadline_alert_emails_no_alerts` - アラートがない場合の動作確認
+- [x] `tests/tasks/test_deadline_notification.py` を作成
+  - [x] `test_send_deadline_alert_emails_dry_run` - dry_runモードでの動作確認
+  - [x] `test_send_deadline_alert_emails_no_alerts` - アラートがない場合の動作確認
 
 ### 4.2 テスト実行（Red）
-- [ ] テストを実行して失敗することを確認
+- [x] テストを実行して失敗することを確認
   ```bash
   pytest tests/tasks/test_deadline_notification.py -v
   ```
 
 ### 4.3 実装
-- [ ] `app/tasks/deadline_notification.py` を作成
-  - [ ] インポート文
-  - [ ] `send_deadline_alert_emails()` 関数実装
-    - [ ] 平日・祝日チェック
-    - [ ] 全事業所を取得
-    - [ ] 各事業所ごとにアラート取得
-    - [ ] 各スタッフへのメール送信
-    - [ ] エラーハンドリング
-    - [ ] ログ出力
+- [x] `app/tasks/deadline_notification.py` を作成
+  - [x] インポート文
+  - [x] `send_deadline_alert_emails()` 関数実装
+    - [x] 平日・祝日チェック
+    - [x] 全事業所を取得
+    - [x] 各事業所ごとにアラート取得
+    - [x] 各スタッフへのメール送信
+    - [x] エラーハンドリング
+    - [x] ログ出力
 
 ### 4.4 テスト実行（Green）
-- [ ] テストを実行してすべてパスすることを確認
+- [x] テストを実行してすべてパスすることを確認
   ```bash
   pytest tests/tasks/test_deadline_notification.py -v
   ```
