@@ -729,14 +729,136 @@ NEXT_PUBLIC_VAPID_PUBLIC_KEY=<公開鍵>
 
 ---
 
-## Phase 6: オプション機能（8-10時間、実装は任意）
+## Phase 6: セキュリティ・パフォーマンス改善＋オプション機能
 
-### 6.1 通知履歴機能（4-5時間）
+### 6.0 パフォーマンス・セキュリティレビュー（完了）✅
+**実施日**: 2026-01-19
+**成果物**: `performance_security_review.md`、`implementation_status_report.md`更新
+
+**レビュー結果**:
+- セキュリティスコア: 9.1/10
+- パフォーマンススコア: 9.2/10
+- 発見課題: 6件（Critical 1件、High 2件、Medium 3件）
+
+---
+
+### 6.1 Critical Issue #1修正: 複数デバイス対応（完了）✅
+**実施日**: 2026-01-19
+**工数**: 1時間
+
+**問題**:
+- `crud_push_subscription.py`の`create_or_update`メソッドで、新規デバイス登録時に既存購読を削除
+- ユーザーがPC+スマホなど複数デバイスで通知を受信できない
+
+**修正内容**:
+- [x] 既存購読削除ロジックを除去（lines 96-99削除）
+- [x] 重要な設計決定として警告コメントを追加
+- [x] 全12テスト（通知設定）パス確認
+
+**成果物**: `k_back/app/crud/crud_push_subscription.py`修正完了
+
+---
+
+### 6.2 High Priority: pywebpush非同期化（2-3時間）⏸️
+**優先度**: High
+**影響**: パフォーマンス改善
+
+**問題**:
+- `send_push_notification()`がpywebpush（同期ライブラリ）を使用
+- AsyncIO環境でブロッキング処理が発生
+
+**実装タスク**:
+- [ ] httpx.AsyncClientによる非同期HTTP実装を検討
+- [ ] または`asyncio.to_thread()`でpywebpushをラップ
+- [ ] パフォーマンステスト実施（100件同時送信）
+
+**成果物**: 非同期Push送信実装
+
+---
+
+### 6.3 High Priority: バッチ削除の最適化（1-2時間）⏸️
+**優先度**: High
+**影響**: パフォーマンス改善
+
+**問題**:
+- `delete_by_staff_id()`がループで個別削除
+- 大量購読時に非効率
+
+**実装タスク**:
+- [ ] SQLAlchemyのbulk deleteに変更
+  ```python
+  stmt = delete(PushSubscription).where(PushSubscription.staff_id == staff_id)
+  result = await db.execute(stmt)
+  await db.commit()
+  return result.rowcount
+  ```
+- [ ] パフォーマンステスト実施
+
+**成果物**: バッチ削除最適化
+
+---
+
+### 6.4 Medium Priority: Service Worker改善（3-4時間）⏸️
+**優先度**: Medium
+**影響**: UX改善、メンテナンス性向上
+
+**実装タスク**:
+- [ ] sw.jsに自動更新ロジック追加（skipWaiting、clients.claim）
+- [ ] オフライン対応（キャッシュ戦略）検討
+- [ ] Push通知データのバリデーション追加
+- [ ] エラーログ記録（通知表示失敗時）
+
+**成果物**: Service Worker改善
+
+---
+
+### 6.5 DoS対策・監査ログ（2-3時間）⏸️
+**優先度**: Medium
+**影響**: セキュリティ強化
+
+**実装タスク**:
+- [ ] レート制限実装（FastAPI Limiterまたはカスタム実装）
+  - subscribe: 10回/分/ユーザー
+  - unsubscribe: 10回/分/ユーザー
+- [ ] Push送信失敗時の監査ログ記録
+- [ ] 購読数上限設定（1ユーザーあたり最大10デバイス）
+
+**成果物**: DoS対策・監査ログ実装
+
+---
+
+### 6.6 リトライメカニズム（2-3時間）⏸️
+**優先度**: Medium
+**影響**: 信頼性向上
+
+**実装タスク**:
+- [ ] Push送信失敗時のリトライロジック追加（tenacity等）
+- [ ] 最大3回リトライ、指数バックオフ
+- [ ] リトライ失敗時のログ記録
+
+**成果物**: リトライメカニズム実装
+
+---
+
+### 6.7 PII保護・タイムゾーン対応（1-2時間）⏸️
+**優先度**: Low
+**影響**: セキュリティ・国際化対応
+
+**実装タスク**:
+- [ ] Push通知ペイロードからPII（個人識別情報）を除外
+- [ ] タイムスタンプをUTC統一（現在は混在の可能性）
+- [ ] ログ出力時のPIIマスキング
+
+**成果物**: PII保護・タイムゾーン対応
+
+---
+
+### 6.8 通知履歴機能（オプション）（4-5時間）⏸️
 - [ ] `push_notification_logs`テーブル作成
 - [ ] 送信履歴記録ロジック追加
 - [ ] 履歴表示UI実装
 
-### 6.2 通知設定カスタマイズ（4-5時間）
+### 6.9 通知設定カスタマイズ（オプション）（4-5時間）⏸️
 - [ ] 通知タイプ別ON/OFF機能
 - [ ] 通知時間帯設定（DND機能）
 - [ ] 設定画面UI拡張
@@ -746,16 +868,29 @@ NEXT_PUBLIC_VAPID_PUBLIC_KEY=<公開鍵>
 ## 進捗管理
 
 ### 完了チェックリスト
-- [ ] Phase 1: Web Push基盤構築（8-10時間）
-- [ ] Phase 2: イベント駆動通知のWeb Push化（6-8時間）
-- [ ] Phase 3: 期限アラートのWeb Push化（14-22時間）
-- [ ] Phase 4: Frontend実装（12-14時間）
-- [ ] Phase 5: ドキュメント・デプロイ（4-6時間）
+- [x] Phase 1: Web Push基盤構築（8-10時間）✅ 100%完了
+- [ ] Phase 2: イベント駆動通知のWeb Push化（6-8時間）⏸️ 未着手
+- [x] Phase 3: 期限アラートのWeb Push化（14-22時間）🚧 70%完了（バッチ統合のみ未完了）
+- [x] Phase 4: Frontend実装（12-14時間）✅ 95%完了（閾値セレクターUIのみ欠如）
+- [ ] Phase 5: ドキュメント・デプロイ（4-6時間）⏸️ 未着手
+- [x] Phase 6: セキュリティ・パフォーマンス改善 🚧 実装中
+  - [x] 6.0 レビュー実施 ✅
+  - [x] 6.1 Critical修正 ✅
+  - [ ] 6.2-6.7 High/Medium優先度課題 ⏸️
 
-### 総見積工数
-**最小**: 44時間（5.5日）
-**最大**: 60時間（7.5日）
-**平均**: 52時間（6.5日）
+### 総見積工数（更新）
+**当初見積**: 44-60時間（5.5-7.5日）
+**Phase 6追加**: +13-20時間（セキュリティ・パフォーマンス改善）
+**新総見積**: 57-80時間（7-10日）
+
+### 完了率
+**全体進捗**: 約75%完了
+- Phase 1: 100% ✅
+- Phase 2: 0% ⏸️
+- Phase 3: 70% 🚧
+- Phase 4: 95% ✅
+- Phase 5: 0% ⏸️
+- Phase 6: 33%（2/6タスク完了）🚧
 
 ---
 
@@ -770,7 +905,7 @@ NEXT_PUBLIC_VAPID_PUBLIC_KEY=<公開鍵>
 ---
 
 **作成日**: 2026-01-13
-**最終更新**: 2026-01-13
+**最終更新**: 2026-01-19
 
 
 ---
@@ -1060,18 +1195,32 @@ ALTER TABLE staffs ADD COLUMN notification_preferences JSONB DEFAULT '{
 ---
 
 **Phase 1**: ✅ 完了（基盤構築: push_subscriptions, API, テスト全22件パス）
-**Phase 2**: 未実装（イベント駆動通知: スタッフアクション、ロール変更）
-**Phase 3**: 🚧 実装中（期限アラート + PWA対応）
+**Phase 2**: ⏸️ 未実装（イベント駆動通知: スタッフアクション、ロール変更）
+**Phase 3**: 🚧 実装中（期限アラート + PWA対応）約70%完了
   - ✅ 3.0 PWA化対応（manifest.json、アイコン、メタタグ）
-  - ⏸️ 3.1 DBマイグレーション（notification_preferences追加）
-  - ⏸️ 3.2 Backend実装（通知設定API、バッチ処理修正）
-  - ✅ 3.3 Frontend実装（16-22時間）
+  - ✅ 3.1 DBマイグレーション（notification_preferences追加、閾値フィールド含む）
+  - ✅ 3.2 Backend実装（通知設定API: 全12テストパス）
+  - ✅ 3.3 Frontend実装（18-25時間）
     - ✅ 3.3.1 Service Worker作成（sw.js）
     - ✅ 3.3.2 Push購読Hook作成（usePushNotification.ts）
     - ✅ 3.3.3 通知設定UI作成（NotificationSettings.tsx）
     - ✅ 3.3.4 プロフィール画面統合（通知設定タブ追加）
     - ⏸️ 3.3.5 Frontend テスト・動作確認
+    - ✅ 3.3.6 ログイン時の自動購読機能実装
+    - ✅ 3.3.8 期限切れアラート機能実装（renewal_overdue、赤色トースト）
+    - ✅ 3.3.9 アプリ内通知ON/OFF制御修正（in_app_notification設定尊重）
+  - ⏸️ 3.3.7 期限通知バッチへのWeb Push統合（次の優先タスク）
   - ⏸️ 3.4 統合テスト
+**Phase 4**: ✅ ほぼ完了（95%、閾値セレクターUIのみ欠如）
+**Phase 5**: ⏸️ 未着手（ドキュメント・本番環境設定）
+**Phase 6**: 🚧 実装中（セキュリティ・パフォーマンス改善）
+  - ✅ 6.0 パフォーマンス・セキュリティレビュー実施（2026-01-19）
+  - ✅ 6.1 Critical Issue #1修正: 複数デバイス対応（2026-01-19）
+  - ⏸️ 6.2 High Priority: pywebpush非同期化
+  - ⏸️ 6.3 High Priority: バッチ削除の最適化
+  - ⏸️ 6.4 Medium Priority: Service Worker改善
+  - ⏸️ 6.5 DoS対策・監査ログ
+  - ⏸️ 6.6-6.7 リトライ・PII保護・タイムゾーン
 
 **VAPID鍵生成**: ✅ 完了
   - 秘密鍵PEM: `/app/private_key.pem`
@@ -1079,11 +1228,17 @@ ALTER TABLE staffs ADD COLUMN notification_preferences JSONB DEFAULT '{
   - フロントエンド環境変数: ✅ 設定済み（`.env.local`）
   - バックエンド環境変数: ⚠️ 要設定（Dockerコンテナ）
 
-**次のステップ**:
-1. バックエンド環境変数設定（VAPID_PRIVATE_KEY、VAPID_PUBLIC_KEY、VAPID_SUBJECT）
-2. 通知設定API実装（notification_preferences）
-3. 期限通知バッチへのWeb Push統合
-4. ブラウザ別動作確認（Chrome/Firefox/Safari/iOS）
+**次のステップ（優先順位順）**:
+1. ✅ ログイン時の自動購読機能実装（Phase 3.3.6完了）
+2. ✅ パフォーマンス・セキュリティレビュー実施（Phase 6.0完了、2026-01-19）
+3. ✅ Critical Issue #1修正: 複数デバイス対応（Phase 6.1完了、2026-01-19）
+4. ✅ 期限切れアラート機能実装（Phase 3.3.8完了、2026-01-19）
+5. ✅ アプリ内通知ON/OFF制御修正（Phase 3.3.9完了、2026-01-19）
+6. 🔴 **最優先**: 期限通知バッチへのWeb Push統合（Phase 3.3.7、5-7時間）
+7. ⏸️ バックエンド環境変数設定（VAPID_PRIVATE_KEY、VAPID_PUBLIC_KEY、VAPID_SUBJECT）
+8. ⏸️ ブラウザ別動作確認（Chrome/Firefox/Safari/iOS）
+9. ⏸️ Phase 6高優先度課題対応（pywebpush非同期化、バッチ削除最適化）
+10. ⏸️ Phase 2: イベント駆動通知実装（6-8時間）
 
 ---
 
@@ -1095,20 +1250,176 @@ ALTER TABLE staffs ADD COLUMN notification_preferences JSONB DEFAULT '{
 - ✅ `k_front/public/icon-192.png` - PWAアイコン（192x192）
 - ✅ `k_front/public/icon-512.png` - PWAアイコン（512x512）
 - ✅ `k_front/hooks/usePushNotification.ts` - Push購読管理Hook
-- ✅ `k_front/components/protected/profile/NotificationSettings.tsx` - 通知設定UI
+- ✅ `k_front/components/protected/profile/NotificationSettings.tsx` - 通知設定UI（閾値フィールド対応）
 - ✅ `k_front/components/protected/profile/Profile.tsx` - プロフィール画面（通知設定タブ統合）
+- ✅ `k_front/components/protected/LayoutClient.tsx` - ログイン時の自動購読ロジック実装、アプリ内通知ON/OFF制御（2026-01-19更新）
+- ✅ `k_front/types/deadline.ts` - DeadlineAlert型定義（renewal_overdue対応、2026-01-19更新）
 - ✅ `k_front/app/layout.tsx` - PWAメタタグ追加
 - ✅ `k_front/.env.local` - VAPID公開鍵設定
 
-### バックエンド（既存）
+### バックエンド
 - ✅ `k_back/app/models/push_subscription.py` - PushSubscriptionモデル
 - ✅ `k_back/app/schemas/push_subscription.py` - Push購読スキーマ
-- ✅ `k_back/app/crud/crud_push_subscription.py` - CRUD操作
+- ✅ `k_back/app/crud/crud_push_subscription.py` - CRUD操作（複数デバイス対応修正、2026-01-19更新）
 - ✅ `k_back/app/api/v1/endpoints/push_subscriptions.py` - Push購読API
 - ✅ `k_back/app/core/push.py` - Push送信サービス
 - ✅ `k_back/app/core/config.py` - VAPID設定
+- ✅ `k_back/app/schemas/deadline_alert.py` - DeadlineAlertスキーマ（renewal_overdue対応、2026-01-19更新）
+- ✅ `k_back/app/services/welfare_recipient_service.py` - 期限アラート生成ロジック（overdue検出、2026-01-19更新）
+- ✅ `k_back/tests/api/v1/test_deadline_alerts_overdue.py` - 期限切れアラートテスト（新規作成、2026-01-19）
 - ✅ `k_back/scripts/generate_vapid_keys.py` - VAPID鍵生成スクリプト
 - ✅ `k_back/private_key.pem` - VAPID秘密鍵
 - ✅ `k_back/public_key.pem` - VAPID公開鍵
 
-**最終更新**: 2026-01-14
+### ドキュメント（2026-01-19追加）
+- ✅ `md_files_design_note/task/*web_push/performance_security_review.md` - セキュリティ・パフォーマンスレビュー
+- ✅ `md_files_design_note/task/*web_push/implementation_status_report.md` - 実装状況レポート（レビュー結果統合）
+- ✅ `md_files_design_note/task/*web_push/log/1-19_log_implementation.md` - 実装ログ（2026-01-19）
+
+**最終更新**: 2026-01-19
+
+**変更履歴**:
+- 2026-01-19: Phase 6.0-6.1完了（セキュリティ・パフォーマンスレビュー、複数デバイス対応修正）
+- 2026-01-19: Phase 3.3.8-3.3.9完了（期限切れアラート機能、アプリ内通知ON/OFF制御）
+- 2026-01-16: Phase 3.3.6（ログイン時の自動購読機能）実装完了
+
+
+---
+
+## Phase 3.3.6: ログイン時の自動購読機能実装（2-3時間）
+
+### 概要
+ユーザーが一度システム通知をONにした場合、次回ログイン時に自動的にPush通知を再購読する仕組みを実装します。
+
+### 背景
+**現状の問題点**:
+- Push通知の購読機能は実装済みだが、ログイン時に自動購読する仕組みがない
+- ユーザーが一度システム通知をONにしても、次回ログイン時には手動で再度ONにする必要がある
+- `notification_preferences.system_notification`の設定が保存されているにも関わらず、購読状態が同期されない
+
+**解決策**:
+- LayoutClient.tsxのマウント時（ログイン直後）に通知設定を取得
+- `system_notification: true`の場合、自動的にPush購読を実行
+- すでに購読済みの場合はスキップ（冪等性を保証）
+
+---
+
+### 3.3.6.1 要件定義
+
+#### 機能要件
+1. **ログイン時の自動購読**
+   - LayoutClient.tsxマウント時に`/api/v1/staffs/me/notification-preferences`を取得
+   - `system_notification: true`の場合、usePushNotification.subscribe()を自動実行
+   - すでに購読済み（isSubscribed: true）の場合はスキップ
+
+2. **エラーハンドリング**
+   - 購読失敗時はコンソールログに記録（ユーザーには通知しない）
+   - 通知権限が拒否されている場合はスキップ
+   - iOS Safari（PWAモードでない）の場合はスキップ
+
+3. **パフォーマンス考慮**
+   - 初回マウント時のみ実行（useEffect依存配列: `[]`）
+   - 他の初期化処理（CSRF、事業所情報取得）と並列実行
+
+#### 非機能要件
+- 既存の初期化処理に影響を与えない
+- ユーザー体験を損なわない（エラー時も画面表示は正常に動作）
+
+---
+
+### 3.3.6.2 実装タスク（TDD）
+
+#### Step 1: テストケース作成（0.5-1時間）
+- [ ] `k_front/__tests__/components/protected/LayoutClient.test.tsx` 作成
+  - テストケース1: `system_notification: true`の場合、subscribe()が呼ばれる
+  - テストケース2: `system_notification: false`の場合、subscribe()が呼ばれない
+  - テストケース3: すでに購読済み（isSubscribed: true）の場合、subscribe()が呼ばれない
+  - テストケース4: 通知設定API取得失敗時、subscribe()が呼ばれない
+  - テストケース5: subscribe()失敗時、エラーログが出力される
+
+#### Step 2: LayoutClient.tsx修正（1-1.5時間）
+- [ ] usePushNotification Hookをインポート
+- [ ] 通知設定取得API呼び出しを追加（useEffect内）
+- [ ] 自動購読ロジック実装
+  ```typescript
+  // 疑似コード
+  useEffect(() => {
+    // 既存の初期化処理...
+
+    // 🆕 自動購読ロジック追加
+    const autoSubscribePush = async () => {
+      try {
+        // 通知設定を取得
+        const preferences = await http.get('/api/v1/staffs/me/notification-preferences');
+
+        // system_notification=trueかつ未購読の場合のみ購読
+        if (preferences.system_notification && !isSubscribed && isSupported) {
+          await subscribe();
+          console.log('[Auto-subscribe] Push notification subscribed on login');
+        }
+      } catch (error) {
+        console.error('[Auto-subscribe] Failed to auto-subscribe:', error);
+        // エラー時も処理を継続（ユーザー体験に影響を与えない）
+      }
+    };
+
+    autoSubscribePush();
+  }, []);
+  ```
+- [ ] エラーハンドリング追加
+- [ ] コンソールログ追加
+
+#### Step 3: テスト実行と修正（0.5時間）
+- [ ] テスト実行: `npm test -- LayoutClient.test.tsx`
+- [ ] 失敗したテストケースを修正
+- [ ] 全テストパスを確認
+
+---
+
+### 3.3.6.3 動作確認項目
+
+#### 手動テスト
+1. **初回ログイン → システム通知ON → ログアウト → 再ログイン**
+   - [ ] 再ログイン時に自動的にPush購読が完了する
+   - [ ] 通知許可ダイアログが表示されない（既に許可済み）
+
+2. **システム通知OFF状態でログイン**
+   - [ ] Push購読が実行されない
+
+3. **ブラウザ別確認**
+   - [ ] Chrome（Desktop）: 自動購読成功
+   - [ ] Firefox（Desktop）: 自動購読成功
+   - [ ] Safari（macOS）: 自動購読成功
+   - [ ] iOS Safari（PWAモード）: 自動購読成功
+   - [ ] iOS Safari（通常ブラウザ）: 自動購読スキップ
+
+4. **エラーケース**
+   - [ ] 通知権限が拒否されている場合: エラーログ出力、画面表示は正常
+   - [ ] バックエンドAPI障害時: エラーログ出力、画面表示は正常
+
+---
+
+### 3.3.6.4 成果物
+- [ ] テストファイル作成: `k_front/__tests__/components/protected/LayoutClient.test.tsx`（テスト環境未構築のため保留）
+- [x] LayoutClient.tsx修正: 自動購読ロジック追加
+  - usePushNotification Hookをインポート
+  - 初期化useEffect内に自動購読ロジックを追加
+  - 通知設定API呼び出しを実装
+  - エラーハンドリング実装
+- [x] 型定義更新: NotificationPreferences（閾値フィールド含む）
+  - LayoutClient.tsx: 型定義更新
+  - NotificationSettings.tsx: 型定義更新
+- [ ] テスト全件パス（テスト環境未構築のため保留）
+- [ ] 手動動作確認完了（Phase 3.1 DBマイグレーション完了後に実施）
+
+---
+
+### 3.3.6.5 見積工数
+**最小**: 2時間
+**最大**: 3時間
+**平均**: 2.5時間
+
+---
+
+**作成日**: 2026-01-16
+**最終更新**: 2026-01-16     
