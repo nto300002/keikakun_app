@@ -1,441 +1,483 @@
-# keikakun_app
+# けいかくん - 個別支援計画管理システム
 
-# keikakun_
-### **アプリケーション要件定義書: ケイカくん**
+福祉サービス事業所における「個別支援計画」の作成・管理業務をDX化するWebアプリケーション。
+計画の進捗管理を効率化し、更新漏れを防ぐことで、職員の業務負担を軽減し、利用者へのサービス品質向上に貢献します。
 
-**1. アプリケーション概要**
-
-福祉サービス事業所における「個別支援計画」の作成・管理業務をDX化するためのWebアプリケーション。計画の進捗管理を効率化し、更新漏れを防ぐことで、職員の業務負担を軽減し、利用者へのサービス品質向上に貢献する。
-
-**2. ユーザー権限（ロール）**
-
-スタッフは3つの役割に分かれ、それぞれ実行できる操作が異なる。上位の権限を持つスタッフによる「承認フロー」を設けることで、安全な運用を実現する。
-
-| 役割 | `owner` (サービス責任者) | `manager` (マネージャー) | `employee` (一般職員) |
-| :--- | :--- | :--- | :--- |
-| **主な役割** | アプリ全体の最高責任者。事業所情報とスタッフを管理する。 | 現場の責任者。計画作成の実務とスタッフの作業を監督する。 | 計画作成の実務担当者。 |
-| **できること** | ・**全機能の操作**<br>・事業所情報(Office)の作成・更新・削除<br>・全スタッフ(Staff)の権限変更・削除 | ・利用者(WelfareRecipient)の登録・更新・削除<br>・個別支援計画の作成・更新・削除<br>・事業所情報の閲覧 | ・全情報の**閲覧** |
-| **制限・承認** | ・自身のデータや事業所の削除には、他の全スタッフの承認が必要。 | ・自身のデータ削除や事業所からの離脱には、`owner`の承認が必要。 | ・利用者や計画の**新規作成・更新・削除**には、`manager`以上の承認が必要。 |
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
 
-**3. 主要機能と画面フロー**
+## 目次
 
-**3.1. 認証と利用開始フロー**
-
-登録方法によって初期の役割（ロール）が決定される。
-
-*   **一般職員 (`employee`)**: 事業所IDが含まれたURL(`/auth/signup`)からサインアップ。
-*   **マネージャー (`manager`)**: 事業所IDが含まれたURL(`/auth/signup`)からサインアップ。
-*   **サービス責任者 (`owner`)**: 専用の管理者登録URL (`/admin/signup`) からサインアップ。責任者はログイン後、まず事業所情報を作成する必要がある(admin/setup)。
-
-**3.2. ダッシュボード (`/dashboard`)**
-
-*   **目的**: ログイン後のトップページ。担当する利用者の計画状況を一覧で把握する。
-*   **表示項目**:
-    *   ログイン中のスタッフ名、役割、権限の説明。
-    *   **利用者一覧テーブル**:
-        *   **氏名**: 利用者のフルネーム。クリックで個別支援計画ページへ遷移。
-        *   **計画の進捗**: 現在の計画が何サイクル目で、どのステップ（アセスメント、原案作成など）にいるか。
-        *   **次回更新日**: 計画の更新期限日と、今日からの残り日数。
-        *   **モニタリング期限**: モニタリングが必要な場合の期限と、残り日数。
-        *   **詳細情報**: リンク(`individual_support_plan, assessment, pdf_list`),利用者の更新,削除
-*   **主な機能**:
-    *   利用者の新規登録（承認フローあり）。
-    *   モニタリング期限の設定。
-
-**3.3. 個別支援計画ページ (`/individual_support_plan`)**
-
-*   **目的**: 特定の利用者一人に絞り、計画の全サイクルと各ステップの進捗を管理する。
-*   **表示項目**:
-    *   **計画サイクルテーブル**: 過去から現在までの全計画サイクルを行として表示。
-        *   **列**: 回数、アセスメント/モニタリング、計画書(原案)、担当者会議、計画書(署名済)
-        *   **セル**: 各ステップの完了状況（チェックボックス等）と、成果物（PDF）へのリンク。
-*   **主な機能**:
-    *   各ステップの成果物（PDF）をアップロード/更新/削除する。
-    *   **処理ロジック（バックエンド）**:
-        1.  **ステップの順守**: 必ず「アセスメント→原案作成→...」の順にしか完了できず、ステップを飛ばすことはできない。
-        2.  **PDFと進捗の連動**: 成果物PDFがアップロードされると、対応するステップが自動的に「完了」となる。
-        3.  **新サイクルの自動生成**: 「計画書(署名済)」がアップロードされると、現在のサイクルが完了したとみなし、次の新しい計画サイクル（モニタリングから開始）が自動的に作成される。
-        4. **期限通知** 
-        - **全体更新**: 残り1ヶ月になったら通知  期限過ぎの場合も 期限が過ぎていますと表示
-        - **モニタリング**: 新しいサイクルができた時点で通知　期限過ぎの場合　期限が過ぎていますと表示 モニタリング期限ボタンで期限を設定(default=7)
-        - **通知の方法**: googleアカウントをページ内に登録し、イベントIDなどを通じてgoogleカレンダーに通知が届く　アプリヘッダーのベルマークをクリックすることでも通知を確認できる (デスクトップ、スマホ上の通知)
-*   **課題・要検討事項**:
-    *   署名済みPDFを再アップロードした場合に、計画サイクルが意図せず重複して作成されてしまう問題を防止するロジックが必要。
-
-
-**3.4. その他の主要ページ**
-
-| ページ名 | URL | 役割 |
-| :--- | :--- | :--- |
-| **事務所管理** | `/admin/office_management` | (`owner`のみ) スタッフの権限変更、事業所情報の編集 |
-| **プロフィール** | `/profile` | 自身の登録情報（名前、メール）の編集、権限変更の申請|申請結果、事業所からの退会申請を行う。認証機能の追加(MFA) |
-| **PDF一覧** | `/pdf_list` | アップロードした全てのアセスメントシートや計画書を一覧で確認・閲覧する。 |
-| **アセスメントシート** | `/assessment` | (notMVP) アセスメントシートのPDFをアップロード・管理する。 (将来的にフォーム化) |
-
-## UI
-- PWA化
-- ダークモードをデフォルトで設定
-- 
+- [主要機能](#主要機能)
+- [技術スタック](#技術スタック)
+- [アーキテクチャ](#アーキテクチャ)
+- [環境構築](#環境構築)
+- [デプロイ](#デプロイ)
+- [開発ガイドライン](#開発ガイドライン)
+- [ドキュメント](#ドキュメント)
 
 ---
 
-**4. 外部サービス連携**
+## 主要機能
 
-**4.1. Googleカレンダー連携**
+### 1. 個別支援計画管理
+- 利用者ごとの計画サイクル管理（アセスメント → 原案作成 → 担当者会議 → 署名）
+- ステップの順序制御と自動進捗管理
+- PDF成果物のアップロード・管理
+- 計画サイクルの自動生成
 
-*   **目的**: 計画の更新期限を自動でGoogleカレンダーに登録し、チーム全体での見落としを防ぐ。
-*   **トリガー**: バックエンドで計画の「次回更新期限」が確定したタイミング。
-*   **処理**:
-    1.  GoogleカレンダーAPIを呼び出し、指定されたカレンダーにイベントを作成。
-    2.  APIから返された**イベントID**と**イベントURL**をデータベース (`SupportPlanCycle`テーブル) に保存する。
-    3.  もし計画日が変更された場合は、保存したイベントIDを使ってカレンダー上のイベントを更新する。
+### 2. 期限アラート通知
+- **メール通知**: 毎日9:00 JST、平日・祝日除く
+- **Web Push通知**: ブラウザ・デバイスへのプッシュ通知
+- **通知閾値のカスタマイズ**: メール・Push通知の開始日数を個別設定可能（5/10/20/30日前）
+- **Google Calendar連携**: 更新期限を自動登録
+
+### 3. 認証・セキュリティ
+- **JWT認証**: Access Token + Refresh Token
+- **2要素認証（2FA）**: TOTP（Time-based One-Time Password）
+- **ロールベースアクセス制御（RBAC）**: owner / manager / employee
+- **承認フロー**: 重要な操作には上位権限者の承認が必要
+- **監査ログ**: 全ての重要操作を記録
+
+### 4. 決済機能（Stripe）
+- **サブスクリプション課金**: 月額3,000円（最大10人の利用者）
+- **無料トライアル**: 10人まで無料
+- **Webhook統合**: リアルタイム課金ステータス更新
+- **カスタマーポータル**: 支払い方法変更、請求書確認、解約
+
+### 5. ユーザー管理
+- **3つのロール**:
+  - `owner`（サービス責任者）: 全機能の操作、事業所管理
+  - `manager`（マネージャー）: 利用者・計画の作成・更新・削除
+  - `employee`（一般職員）: 全情報の閲覧のみ
+- **権限変更申請**: 承認フローによる安全な権限変更
 
 ---
 
-**5. データベースモデル**
+## 技術スタック
 
-*   **`Staff`, `Office`, `OfficeStaff`**: スタッフと事業所の「多対多」の関係を管理。
-*   **`WelfareRecipient`, `Office`, `OfficeWelfareRecipient`**: 利用者と事業所の「多対多」の関係を管理。
-*   **`SupportPlanCycle`**: 利用者一人の計画1サイクル（約6ヶ月）を管理する中核モデル。
-*   **`SupportPlanStatus`**: 1つのサイクル内の各ステップ（アセスメント、モニタリング等）の進捗を管理。
-*   **`PlanDeliverable`**: 各ステップでアップロードされた成果物（PDF）の情報を管理。
-*   **`Notice`**: アプリ内の各種通知（承認依頼など）を管理。
-*   **`RoleChangeRequest`**: スタッフからの権限変更申請の履歴を管理。
+### バックエンド
+| 技術 | バージョン | 用途 |
+|------|-----------|------|
+| **Python** | 3.12 | プログラミング言語 |
+| **FastAPI** | 0.115.0 | Webフレームワーク |
+| **SQLAlchemy** | 2.0.41 | ORM（非同期対応） |
+| **PostgreSQL** | latest | データベース |
+| **Alembic** | 1.16.4 | マイグレーション |
+| **Pydantic** | 2.11.7 | データ検証 |
+| **Stripe** | 7.0.0+ | 決済処理 |
+| **pywebpush** | 1.14.0+ | Web Push通知 |
+| **fastapi-mail** | 1.4.1 | メール送信 |
+| **APScheduler** | 3.10.4 | バッチジョブ |
+| **boto3** | latest | AWS S3連携 |
+
+### フロントエンド
+| 技術 | バージョン | 用途 |
+|------|-----------|------|
+| **Next.js** | 16.0.10 | Reactフレームワーク（App Router） |
+| **React** | 19.1.2 | UIライブラリ |
+| **TypeScript** | 5.x | プログラミング言語 |
+| **Tailwind CSS** | 4.x | CSSフレームワーク |
+| **Radix UI** | latest | UIコンポーネント |
+| **React Hook Form** | 7.62.0 | フォーム管理 |
+| **Zod** | 4.1.4 | スキーマ検証 |
+| **Turbopack** | latest | 高速バンドラー |
+
+### インフラ
+| サービス | 用途 |
+|---------|------|
+| **Google Cloud Run** | バックエンドホスティング |
+| **Vercel / Cloud Run** | フロントエンドホスティング |
+| **PostgreSQL** | データベース |
+| **AWS S3** | ファイルストレージ（画像、PDF） |
+| **Google Cloud Build** | CI/CDパイプライン |
+| **GitHub Actions** | テスト自動化 |
+
 ---
 
+## アーキテクチャ
+
+### バックエンド4層アーキテクチャ
+
+```
+API層 (endpoints/)       # HTTPリクエスト・レスポンス処理
+  ↓
+Services層 (services/)   # ビジネスロジック、複数CRUD操作の組み合わせ
+  ↓
+CRUD層 (crud/)          # 単一モデルのデータベース操作
+  ↓
+Models層 (models/)      # SQLAlchemyモデル定義
+```
+
+**設計原則**:
+- 各層の責務を明確に分離
+- 一方向の依存関係（API → Services → CRUD → Models）
+- テスタビリティの向上
+- 保守性・拡張性の確保
+
+### フロントエンド構成
+
+```
+app/
+├── (auth-pages)/        # 認証関連ページ
+├── dashboard/           # ダッシュボード
+├── recipients/          # 利用者管理
+├── admin/              # 事業所管理（owner専用）
+└── components/         # 共通コンポーネント
+```
+
 ---
 
-### **1. 決済機能の要件定義**
+## 環境構築
 
-**1.1. 課金モデル**
+### 前提条件
 
-*   **料金体系**:
-    *   **月額 3,000円** のサブスクリプションモデル。
-    *   この料金で、**最大10人**の利用者（`WelfareRecipient`）を登録・管理可能。
-*   **課金単位**:
-    *   課金は事業所（`Office`）ごとに行われます。
-    *   1つの事業所が複数のプランを契約することはできません。基本は1事業所1契約です。
-*   **課金トリガー**:
-    *   事業所に所属するアクティブな利用者数が**10人に達した状態で、11人目を登録しようとした瞬間**に、課金（サブスクリプション登録）が要求されます。
-    *   すでに課金中の事業所は、利用者数に関わらず、毎月自動で請求が発生します。
+- Docker & Docker Compose
+- Node.js 20+
+- Python 3.12+
 
-**1.2. 必要なライブラリ・サービス**
+### バックエンドセットアップ
 
-*   **決済代行サービス**: **Stripe**
-    *   **理由**: 豊富な機能、優れた開発者向けドキュメント、セキュアな決済処理、サブスクリプション管理機能など、今回の要件に最適なため。
-*   **バックエンドライブラリ**: `stripe` (`^9.0.0` or later)
-    *   FastAPIからStripeのAPIを呼び出すための公式Pythonクライアント。
-*   **フロントエンドライブラリ**: `@stripe/stripe-js`, `@stripe/react-stripe-js`
-    *   Reactアプリケーションに、セキュアなクレジットカード入力フォーム（Stripe Elements）や決済処理機能を組み込むための公式ライブラリ。
+1. **リポジトリクローン**:
+   ```bash
+   git clone --recursive https://github.com/yourusername/keikakun_app.git
+   cd keikakun_app
+   ```
 
-**1.3. 決済フロー**
+2. **環境変数設定**:
+   ```bash
+   cp .env.example .env
+   # .env ファイルを編集して必要な環境変数を設定
+   ```
 
-1.  **課金画面への誘導**:
-    *   事業所の利用者数が10人の状態で、フロントエンドの「利用者作成ボタン」を押す、または利用者作成APIを呼び出す。
-    *   バックエンドはAPIリクエストを受け取った際、現在の利用者数と課金状況をチェックし、「要課金」と判断した場合、`402 Payment Required`というステータスコードとエラーメッセージを返す。
-    *   フロントエンドは`402`ステータスコードを受け取り、ユーザーを自動的に決済ページ（`/office_management`）にリダイレクトする。
+   必要な環境変数（例）:
+   ```
+   DATABASE_URL=postgresql+psycopg://user:pass@localhost:5432/keikakun
+   SECRET_KEY=your-secret-key
+   STRIPE_SECRET_KEY=sk_test_...
+   VAPID_PRIVATE_KEY=...
+   VAPID_PUBLIC_KEY=...
+   AWS_ACCESS_KEY_ID=...
+   ```
 
-2.  **サブスクリプション登録 (Stripe Checkout)**:
-    *   **バックエンド**:
-        1.  決済ページが表示される際、フロントエンドはバックエンドに「決済セッション作成」をリクエストする。
-        2.  バックエンドはStripe APIを呼び出し、**Stripe Checkoutセッション**を作成します。このセッションには、料金プランIDや成功時・キャンセル時のリダイレクト先URLが含まれます。
-        3.  作成されたセッションIDをフロントエンドに返します。
-    *   **フロントエンド**:
-        1.  受け取ったセッションIDを使い、Stripe.jsの`redirectToCheckout`関数を呼び出します。
-        2.  ユーザーはStripeがホストする安全な決済ページにリダイレクトされ、そこでカード情報などを入力します。
+3. **Dockerコンテナ起動**:
+   ```bash
+   docker-compose up -d backend
+   ```
 
-3.  **決済完了とステータス同期**:
-    *   ユーザーが決済を完了すると、Stripeはバックエンドの指定した**Webhookエンドポイント**に`checkout.session.completed`というイベントを送信します。
-    *   **バックエンド (Webhookハンドラ)**:
-        1.  Webhookリクエストの署名を検証し、Stripeからの正当なリクエストであることを確認します。
-        2.  イベントのペイロードから`customer_id`（顧客ID）と`subscription_id`（サブスクリプションID）を取得します。
-        3.  これらのIDを、事業所モデル（`Office`）の新しいカラム（例: `stripe_customer_id`, `stripe_subscription_id`）に保存します。
-        4.  事業所の課金ステータス（例: `billing_status`）を`'active'`（課金中）に更新します。
-    *   ユーザーはフロントエンドの決済成功ページにリダイレクトされ、「登録が完了しました」といったメッセージが表示されます。
+4. **マイグレーション実行**:
+   ```bash
+   docker exec keikakun_app-backend-1 alembic upgrade head
+   ```
 
-**1.4. 必要なデータベースモデルの変更**
+5. **テスト実行**:
+   ```bash
+   docker exec keikakun_app-backend-1 pytest tests/ -v
+   ```
 
-`Office`テーブルに、Stripeの情報を紐付けるためのカラムを追加します。
+6. **バックエンドアクセス**:
+   ```
+   http://localhost:8000
+   API ドキュメント: http://localhost:8000/docs
+   ```
 
+### フロントエンドセットアップ
+
+1. **依存関係インストール**:
+   ```bash
+   cd k_front
+   npm install
+   ```
+
+2. **環境変数設定**:
+   ```bash
+   cp .env.local.example .env.local
+   # .env.local を編集
+   ```
+
+   必要な環境変数:
+   ```
+   NEXT_PUBLIC_API_URL=http://localhost:8000
+   NEXT_PUBLIC_VAPID_PUBLIC_KEY=...
+   ```
+
+3. **開発サーバー起動**:
+   ```bash
+   npm run dev
+   ```
+
+4. **フロントエンドアクセス**:
+   ```
+   http://localhost:3000
+   ```
+
+---
+
+## デプロイ
+
+### CI/CDパイプライン
+
+```
+GitHub (main ブランチ push)
+    ↓
+GitHub Actions (cd-backend.yml)
+    ↓ pytest実行
+    ↓
+Cloud Build (cloudbuild.yml)
+    ↓ Dockerイメージビルド
+    ↓
+Artifact Registry
+    ↓
+Cloud Run デプロイ
+```
+
+### 環境変数の追加方法
+
+新しい環境変数を追加する際は、以下の3ステップが必要です:
+
+1. **GitHub Secrets に追加**
+2. **`.github/workflows/cd-backend.yml` の `--substitutions` に追加**
+3. **`k_back/cloudbuild.yml` の `--update-env-vars` に追加**
+
+詳細は `md_files_design_note/environment_variables_setup.md` を参照してください。
+
+### デプロイコマンド
+
+```bash
+# mainブランチにpush
+git push origin main
+
+# GitHub Actionsで自動デプロイ
+# https://github.com/yourusername/keikakun_app/actions
+```
+
+---
+
+## 開発ガイドライン
+
+### コーディング規約
+
+#### バックエンド（Python）
+
+**インポートルール**:
 ```python
-# app/models/office.py の Office モデル
-class BillingStatus(enum.Enum):
-    free = 'free'          # 無料プラン
-    active = 'active'        # 課金中
-    past_due = 'past_due'    # 支払い延滞
-    canceled = 'canceled'    # キャンセル済み
+# ✅ 正しい
+from app import crud
+billing = await crud.billing.get_by_office_id(db=db, office_id=office_id)
 
-class Office(Base):
-    # ... 既存のカラム ...
-    name: Mapped[str]
-    
+# ❌ 誤り（循環参照の原因）
+from app.crud.crud_billing import crud_billing
+```
 
-    billing_status: Mapped[BillingStatus] = mapped_column(
-        SQLAlchemyEnum(BillingStatus), default=BillingStatus.free, nullable=False
+**非同期処理**:
+```python
+# 全てのI/O処理は非同期で実装
+async def get_user(db: AsyncSession, user_id: UUID) -> User:
+    result = await db.execute(select(User).where(User.id == user_id))
+    return result.scalars().first()
+```
+
+**N+1問題の回避**:
+```python
+# selectinload を使用
+stmt = select(Billing).options(selectinload(Billing.office))
+```
+
+**コメント・エラーメッセージ**: 日本語で記述
+```python
+# 課金ステータスを確認
+if billing.billing_status == BillingStatus.past_due:
+    raise HTTPException(
+        status_code=403,
+        detail="支払いが延滞しています。請求ページから更新してください"
     )
-    stripe_customer_id: Mapped[Optional[str]] = mapped_column(String(255), unique=True)
-    stripe_subscription_id: Mapped[Optional[str]] = mapped_column(String(255), unique=True)
- 
+```
+
+#### フロントエンド（TypeScript）
+
+**型定義の徹底**:
+```typescript
+interface User {
+  id: string;
+  email: string;
+  role: 'owner' | 'manager' | 'employee';
+}
+```
+
+**エラーハンドリング**:
+```typescript
+try {
+  await api.createRecipient(data);
+} catch (error) {
+  if (error instanceof ApiError && error.status === 402) {
+    router.push('/admin/billing');
+  }
+}
+```
+
+### Git運用
+
+**ブランチ戦略**:
+- `main`: 本番環境
+- `feature/*`: 機能開発
+- `fix/*`: バグ修正
+
+**コミットメッセージ**:
+```
+feat: 新機能追加
+fix: バグ修正
+docs: ドキュメント更新
+refactor: リファクタリング
+test: テスト追加・修正
+chore: ビルド・設定変更
+
+例: feat: VAPID環境変数をCI/CDパイプラインに追加
 ```
 
 ---
 
-### **2. 更新された要件定義書への反映**
+## ドキュメント
 
-以下に、既存の要件定義書に上記の決済機能要件を組み込んだものを示します。
+### 技術ドキュメント
 
-**(主要機能と画面フローのセクションに追記)**
+- **[技術スタック詳細](./md_files_design_note/tech_stack.md)**: 全技術の詳細説明
+- **[環境変数設定ガイド](./md_files_design_note/environment_variables_setup.md)**: CI/CD環境変数設定手順
+- **[アーキテクチャガイド](./.claude/CLAUDE.md)**: 4層アーキテクチャ、設計原則
+- **[面接想定質問集](./md_files_design_note/interview_questions.md)**: 技術面接対策
 
-**3.5. 決済・請求管理ページ (`/office/billing`)**
+### タスク管理
 
-*   **目的**: 事業所の課金ステータスを確認し、決済手続きを行う。
-*   **アクセス条件**:
-    *   利用者数が上限に達し、追加登録時に自動でリダイレクトされる。->`owner`のみ
-    *   `owner`が事務所管理ページから遷移する。
-    * それ以外のロールでは警告が出る => `利用上限のお知らせ(...上記要件をまとめた文)をサービス管理者にお知らせください`
-*   **表示項目**:
-    *   現在のプラン（無料プラン / 月額3,000円プラン）。
-    *   現在の登録利用者数 / 上限利用者数 (例: `8 / 10人`)。
-    *   課金ステータス（課金中, 支払い延滞など）。
-    *   **Stripeカスタマーポータルへのリンク**: 登録済みのユーザーが、支払い方法の変更や請求書の確認、サブスクリプションの解約を行うためのStripe提供ページへのリンク。
-*   **主な機能**:
-    *   **サブスクリプション登録**: Stripe Checkoutを利用した決済フローを開始する。
-
-**(開発方針・技術メモのセクションに追記)**
-
-**8. 決済処理**
-
-*   **決済代行サービス**: **Stripe**を利用する。
-*   **フロー**:
-    *   利用者数が上限（10人）に達した場合、バックエンドは`402 Payment Required`を返し、フロントエンドは決済ページへリダイレクトする。
-    *   決済処理は、安全な**Stripe Checkout**ページにリダイレクトして行う。
-    *   決済完了後のステータス同期は、**Stripe Webhook**を用いて非同期で実行する。バックエンドはWebhookの署名を必ず検証する。
-*   **データモデル**: `Office`モデルに`billing_status`、`stripe_customer_id`、`stripe_subscription_id`のカラムを追加し、Stripeの顧客・契約情報と紐付ける。
----
-
-**6. UI/UX要件**
-
-*   **ダークモード**: 目の負担を軽減するダークモードに対応する。
-*   **PWA化**: スマートフォンでもネイティブアプリのように快適に利用できるよう、PWA（Progressive Web App）に対応する。
+- **[Web Push TODO](./md_files_design_note/task/*web_push/TODO.md)**: Web Push実装進捗
+- **[実装状況レポート](./md_files_design_note/task/*web_push/implementation_status_report.md)**: 各フェーズの完了状況
+- **[パフォーマンス・セキュリティレビュー](./md_files_design_note/task/*web_push/performance_security_review.md)**
 
 ---
 
-**7. 開発方針・技術メモ**
-
-*   **アーキテクチャ**: フロントエンド(Next.js)とバックエンド(FastAPI)を分離し、`gitmodules`でリポジトリを管理。
-*   **バックエンド責務**:
-    *   **エンドポイント層**: リクエストの受付とレスポンスの返却。サービス層を呼び出す。
-    *   **サービス層**: 複数のCRUD処理を組み合わせ、一つのビジネスロジック（機能）を実装する。
-    *   **CRUD層**: データベースに対する基本的なデータ操作（作成, 読込, 更新, 削除）を担う。
-*   **データベース**: SQLAlchemyの`selectinload`/`joinload`を適切に使い分け、N+1問題を回避しクエリパフォーマンスを最適化する。
-*   **CI/CD**: 開発の早い段階でデプロイの自動化パイプラインを構築する。
-*   **インフラ**: 運用費用を抑えるため、サーバーレスやPaaSなどの安価なクラウドサービスを積極的に利用する。
+## プロジェクト構成
 
 ```
-keikakun_front/
-├── .git/
-├── .next/
-├── app/
-│   ├── (auth-pages)/
-|   |   ├── admin/signup/
-│   │   ├── e-mail_authentication/
-│   │   ├── reset-password/
-│   │   ├── [office_id]/signup/
-│   │   └── /login
-|   |
-│   ├── api/
-│   ├── components/
-│   │   ├── hotbar.tsx
-│   │   ├── staff/
-│   │   ├── office/
-│   │   ├── welfare_recipient/
-│   │   ├── support_plan_cycle/
-│   │   ├── support_plan_status/
-│   │   ├── plan_deliverable/
-│   │   ├── notice/
-│   │   ├── role_change_request/
-│   │   └── ui/
-│   ├── [recipient_id]/ --/individual_support_plan --/assessment --/pdf_list
-│   ├── admin/
-|   |     ├── office_management/
-|   |     └── setup/
-│   ├── dashboard/
-│   ├── recipients/ --/edit --/new
-│   ├── profile/ --/edit
-│   ├── style/
-│   ├── favicon.ico
-│   ├── globals.css
-│   ├── layout.tsx
-│   └── page.tsx
-├── components/
-│   └── ui/
-├── lib/
-│   ├── api/
-│   │   ├── auth/
-│   │   ├── support_plan.ts
-│   │   ├── getStaffProfile.ts
-│   │   ├── recipient.ts
-│   │   ├── dashboard.ts
-│   │   └── checkStaffProfile.ts
-│   ├── transformers/
-│   ├── supportPlanUtils.ts
-│   ├── utils.ts
-│   ├── errorMessages.ts
-│   └── validate.ts
-├── types/
-├── utils/
-│   └── supabase/
-├── supabase/
-├── test/
-├── public/
-├── node_modules/
-├── package.json
-├── package-lock.json
-├── middleware.ts
-├── tailwind.config.ts
-├── components.json
-├── next.config.js
-├── next-env.d.ts
-├── tsconfig.json
-├── type.ts
-├── postcss.config.js
-├── jest.config.js
-├── .eslintrc.json
-├── .gitignore
-└── README.md
+keikakun_app/
+├── .github/
+│   └── workflows/
+│       ├── cd-backend.yml          # バックエンドCI/CD
+│       ├── ci-frontend.yml         # フロントエンドCI
+│       └── security-check.yml      # セキュリティチェック
+├── k_back/                         # バックエンド（サブモジュール）
+│   ├── app/
+│   │   ├── api/v1/endpoints/      # APIエンドポイント
+│   │   ├── services/              # ビジネスロジック
+│   │   ├── crud/                  # データベース操作
+│   │   ├── models/                # SQLAlchemyモデル
+│   │   ├── schemas/               # Pydanticスキーマ
+│   │   └── core/                  # 設定、認証、メール、Push通知
+│   ├── scripts/                   # 管理スクリプト
+│   ├── tests/                     # テストコード
+│   ├── cloudbuild.yml            # Cloud Build設定
+│   └── requirements.txt          # Python依存関係
+├── k_front/                       # フロントエンド（サブモジュール）
+│   ├── app/
+│   │   ├── dashboard/            # ダッシュボード
+│   │   ├── recipients/           # 利用者管理
+│   │   ├── admin/                # 事業所管理
+│   │   └── components/           # 共通コンポーネント
+│   ├── hooks/                    # カスタムフック
+│   ├── types/                    # 型定義
+│   └── package.json              # Node依存関係
+├── md_files_design_note/         # ドキュメント
+│   ├── tech_stack.md
+│   ├── environment_variables_setup.md
+│   └── interview_questions.md
+├── .env.example                  # 環境変数テンプレート
+├── docker-compose.yml            # Docker設定
+└── README.md                     # このファイル
 ```
-
-
-```
-keikakun_api/
-├── .git/
-├── app/
-│   ├── api/
-│   │   ├── v1/
-│   │   │   ├── endpoints/
-│   │   │   │   ├── support_plan.py
-│   │   │   │   ├── service_offices.py
-│   │   │   │   ├── user_password.py
-│   │   │   │   ├── login.py
-│   │   │   │   ├── service_recipient.py
-│   │   │   │   ├── staff.py
-│   │   │   │   └── __init__.py
-│   │   │   ├── control_authority.py
-│   │   │   ├── api.py
-│   │   │   └── __init__.py
-│   │   ├── deps.py
-│   │   └── __init__.py
-│   ├── auth/
-│   ├── core/
-│   ├── crud/
-│   ├── db/
-│   ├── models/
-│   │   ├── staff.py
-│   │   ├── support_plan.py
-│   │   ├── service_recipient.py
-│   │   ├── base.py
-│   │   ├── admin_staff_details.py
-│   │   ├── permission.py
-│   │   ├── role_change_request.py
-│   │   ├── service_office.py
-│   │   ├── enums.py
-│   │   └── __init__.py
-│   ├── schemas/
-│   ├── services/
-│   ├── main.py
-│   ├── exceptions.py
-│   └── __init__.py
-├── migration/
-│   ├── versions/
-│   ├── env.py
-│   ├── script.py.mako
-│   └── README
-├── tests/
-├── supabase/
-├── .pytest_cache/
-├── .vscode/
-├── __pycache__/
-├── requirements.txt
-├── requirements-dev.txt
-├── requirements.in
-├── requirements-dev.in
-├── pytest.ini
-├── alembic.ini
-├── Dockerfile
-├── .gitignore
-└── README.md
-```
-
-## 他要件
-- コーディング規約
-- apiの責務(endpoints, crud, serveces): 具体的なコード例と、メソッドのインポート方法、crudメソッド、サービスメソッドの呼び出し方
-
-2. バックエンドにおける各層の責務定義
-品質と保守性の高いコードを維持するため、各層の役割を以下のように厳格に定義する。
-- api 層 (エンドポイント)
-責務: HTTPリクエストの受付とレスポンスの返却、認証・認可、リクエスト内容の検証。対応するservices層のメソッドを呼び出す。
-禁止事項: ビジネスロジックの実装、crud層の直接呼び出し。
-- services 層 (ビジネスロジック)
-責務: アプリケーション固有のユースケースを実装する。複数のcrud処理を組み合わせ、一連のビジネスプロセスを構成する。トランザクション管理。
-禁止事項: データベースのテーブル構造に直接依存した処理。
-- crud 層 (データベースアクセス)
-責務: 単一のモデル（テーブル）に対する、基本的なCRUD（作成, 読込, 更新, 削除）操作のみを提供する。
-禁止事項: ビジネスロジックの実装、複数のモデルにまたがる複雑な更新。
-- schemas 層 (データ構造定義)
-責務: APIの入出力や層間でデータをやり取りするための厳格なデータ構造（DTO）をPydanticを用いて定義する。
-禁止事項: バリデーション以外のロジックの実装。
-3. コーディング規約：インポートルール
-- crud層の呼び出し: services層からcrud層のメソッドを呼び出す際は、必ずfrom app import crudとしてトップレベルのパッケージをインポートし、crud.crud_オブジェクト名.メソッド()の形式で呼び出す。これにより、モジュールの依存関係を一元管理し、循環参照を防止する。
-- 一方向の依存: api → services → crudという一方向の依存関係を徹底する。逆方向のインポートは禁止する。
-
-
--
----
-## フロントエンド (Next.js)
-| ライブラリ名                      | 推奨バージョン                 | 内容・役割                                                                       |
-| :-------------------------- | :---------------------- | :-------------------------------------------------------------------------- |
-| **`next`**                  | `^15.3.5`               | **フレームワーク**: Reactの主要フレームワーク。App Router、サーバーコンポーネント、ファイルベースルーティングなどを提供。     |
-| **`react`**                 | `^19.1.0`               | **UIライブラリ**: ユーザーインターフェースを構築するためのコアライブラリ。                                   |
-| **`react-dom`**             | `^19.1.0`               | **UIライブラリ**: ReactをブラウザのDOMに描画するためのライブラリ。                                   |
-| **`tailwindcss`**           | `^4.1.11`               | **CSSフレームワーク**: ユーティリティファーストのアプローチで、効率的にUIをデザインする。                          |
-| **`shadcn-ui`**             | `^0.9.5`                | **UIコンポーネント**: Tailwind CSSベースの美しくアクセシブルなUIコンポーネント群。コピー＆ペーストでプロジェクトに導入できる。  |
-| **`@tanstack/react-query`** | `^5.82.0`               | **データ取得・状態管理**: サーバーからのデータ取得、キャッシュ、非同期状態の管理を宣言的に行う。SWRと人気を二分するが、より高機能。      |
-| **`react-hook-form`**       | `^7.60.0`               | **フォーム管理**: パフォーマンスが高く、柔軟なフォームの状態管理とバリデーションを実現する。                           |
-| **`zod`**                   | `^4.0.5`                | **スキーマ検証**: TypeScriptファーストのスキーマ定義・検証ライブラリ。フォームの入力値やAPIレスポンスの型を安全に検証できる。    |
-| **`axios`**                 | `^1.10.0`               | **HTTPクライアント**: `fetch` APIのラッパー。リクエスト/レスポンスのインターセプト、タイムアウト設定など、より高度な機能を提供。 |
-| **`date-fns`**              | `^4.1.0`                | **日付操作**: 軽量でモダンな日付操作ライブラリ。「残り日数」の計算や日付のフォーマットに利用。                          |
-| **`lucide-react`**          | `^0.525.0`              | **アイコン**: シンプルで美しいアイコンセット。shadcn/uiと親和性が高い。                                 |
-| **`@supabase/supabase-js`** | `^2.50.5`               | **Supabaseクライアント**: Supabaseの認証やDB操作をフロントエンドから安全に行うための公式ライブラリ。              |
-| **`typescript`**            | `^5.8.3`                | **言語**: JavaScriptに静的な型付けを追加し、コードの堅牢性を高める。                                  |
-| **`eslint` / `prettier`**   | 最新 (`^9.30.1`/`^3.6.2`) | **リンター/フォーマッター**: コードの品質を保ち、チーム内でのスタイルを統一するための必須ツール。                        |
 
 ---
 
-## バックエンド (FastAPI)
+## 主要なバッチ処理
 
-| ライブラリ名                         | 推奨バージョン    | 内容・役割                                                                        |
-| :----------------------------- | :--------- | :--------------------------------------------------------------------------- |
-| **`fastapi`**                  | `^0.116.0` | **フレームワーク**: Pythonの主要な非同期Webフレームワーク。高性能で、依存性注入や自動APIドキュメント生成が特徴。            |
-| **`uvicorn`**                  | `^0.35.0`  | **ASGIサーバー**: FastAPIアプリケーションを実行するための、軽量で高速なサーバー。                            |
-| **`sqlalchemy`**               | `^2.0.41`  | **ORM**: Pythonでデータベースをオブジェクト指向的に操作するためのライブラリ。非同期サポートが強化されている。               |
-| **`asyncpg`**                  | `^0.30.0`  | **DBドライバ**: SQLAlchemyが非同期でPostgreSQL（Supabase）と通信するために必要な、高性能なデータベースドライバ。   |
-| **`alembic`**                  | `^1.16.4`  | **DBマイグレーション**: SQLAlchemyのモデル定義の変更を検出し、データベーススキーマを安全に更新するための必須ツール。          |
-| **`pydantic`**                 | `^2.11.7`  | **データ検証**: FastAPIの根幹をなすデータ検証ライブラリ。APIの入出力（スキーマ）を厳格に定義・検証する。                 |
-| **`pydantic-settings`**        | `^2.10.1`  | **設定管理**: `.env`ファイルなどから環境変数を型安全に読み込み、アプリケーションの設定を管理する。                      |
-| **`python-jose`**              | `^3.5.0`   | **JWT操作**: JWT（JSON Web Token）のエンコード・デコードを行う。Supabase Authや独自の認証処理で使用。       |
-| **`passlib`**                  | `^1.7.4`   | **ハッシュ化**: パスワードなどのハッシュ化と検証を行うライブラリ。`bcrypt`アルゴリズムのサポートも含む。                  |
-| **`google-api-python-client`** | `^2.176.0` | **Google APIクライアント**: GoogleカレンダーAPIなどと連携するための公式ライブラリ。                       |
-| **`google-auth-oauthlib`**     | `^1.2.2`   | **Google認証**: OAuth 2.0フローを実装し、ユーザーの代わりにGoogle APIへのアクセス許可を得るために使用。          |
-| **`httpx`**                    | `^0.28.1`  | **非同期HTTPクライアント**: `requests`ライブラリの非同期版。サービス層から外部API（Googleなど）を非同期で呼び出す際に使用。 |
-| **`supabase` (Python)†**       | `^2.16.0`  | **Supabaseクライアント (管理用)**: バックエンドからSupabaseのAdmin権限（ユーザー招待など）を操作するための公式ライブラリ。 |
-| **`python-multipart`**         | `^0.0.20`  | **ファイルアップロード**: FastAPIでファイルアップロード（`UploadFile`）を扱うために必要。                    |
-| **`pytest`**                   | `^8.4.1`   | **テストフレームワーク**: Pythonのデファクトスタンダードなテストフレームワーク。                               |
-| **`pytest-asyncio`**           | `^1.0.0`   | **非同期テスト**: `pytest`で`async def`のテストケースを実行するために必要。                           |
+### 期限アラート通知バッチ
+
+**実行頻度**: 毎日0:00 UTC（9:00 JST）、平日・祝日除く
+
+**処理内容**:
+1. 全事業所の利用者を取得
+2. 更新期限が閾値以内の利用者を抽出
+3. スタッフの通知設定に基づいてフィルタリング
+4. メール + Web Push通知を送信
+
+**手動実行**:
+```bash
+# ドライラン（送信せず確認のみ）
+docker exec keikakun_app-backend-1 python3 scripts/run_deadline_notification.py --dry-run
+
+# 本番実行
+docker exec keikakun_app-backend-1 python3 scripts/run_deadline_notification.py
+```
 
 ---
 
-Last updated: 2025-11-21
-Last updated: 2025-11-24 11:47
-Last updated: 2025-11-25 21:13
+## トラブルシューティング
+
+### バックエンド
+
+**MissingGreenletエラー**:
+- 原因: 非同期コンテキスト外でのリレーション属性アクセス
+- 解決: `selectinload()` を使用してリレーションを事前ロード
+
+**VAPID認証エラー（403 Forbidden）**:
+- 原因: フロントエンドとバックエンドのVAPID公開鍵が不一致
+- 解決: 両方の環境変数を確認し、同じ鍵を使用
+
+**Web Push通知が届かない**:
+- 410 Goneエラー: 購読期限切れ → 自動的にDBから削除される
+- Service Worker未登録: ブラウザのキャッシュクリア後、再登録が必要
+
+### フロントエンド
+
+**ビルドエラー**:
+```bash
+# node_modulesを削除して再インストール
+rm -rf node_modules package-lock.json
+npm install
+```
+
+**Lintエラー**:
+```bash
+npm run lint
+```
+
+---
+
+## セキュリティ
+
+- **HTTPS強制**: 本番環境では必須
+- **CSRF保護**: fastapi-csrf-protect
+- **SQL Injection防止**: SQLAlchemyのパラメータ化クエリ
+- **XSS防止**: Pydanticバリデーション、Reactデフォルトエスケープ
+- **認証トークン**: HttpOnly Cookie
+- **監査ログ**: 全ての重要操作を記録
+
+---
+
+## ライセンス
+
+MIT License
+
+---
+
+## 貢献
+
+プルリクエスト歓迎です。大きな変更の場合は、まずissueを開いて変更内容を議論してください。
+
+---
+
+## サポート
+
+質問やバグ報告は、GitHubのIssuesまでお願いします。
+
+---
+
+**最終更新**: 2026-01-20
+**バージョン**: 1.0.0
