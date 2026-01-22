@@ -38,7 +38,7 @@ jobs:
       - name: Run Pytest
         working-directory: ./k_back
         env:
-          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          TESTING: "1"
           TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
           SECRET_KEY: ${{ secrets.TEST_SECRET_KEY }}
           FRONTEND_URL: "http://test.local"
