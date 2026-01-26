@@ -40,7 +40,7 @@ jobs:
         env:
           TESTING: "1"
           ENVIRONMENT: "test"
-          DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }} # ここは変更しない
           TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
           SECRET_KEY: ${{ secrets.TEST_SECRET_KEY }}
           FRONTEND_URL: "http://test.local"
