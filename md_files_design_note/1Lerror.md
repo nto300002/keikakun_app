@@ -1,268 +1,175 @@
-# 本番環境エラー - 修正完了
-
-## 問題の本質
-
-### エラーパターン
-すべてのテストで `期待値 + 6` のエラーが発生：
-- `test_send_deadline_alert_emails_dry_run`: 期待値 1 → 実際 7 (+6)
-- `test_send_deadline_alert_emails_no_alerts`: 期待値 0 → 実際 6 (+6)
-- `test_send_deadline_alert_emails_with_threshold_filtering`: 期待値 1 → 実際 7 (+6)
-- その他、全テストで同様のパターン
-
-### 根本原因（3つの複合問題）
-
-1. **is_test_dataフィルタリングの欠如**
-   - 期限アラート取得クエリで `is_test_data=False` のフィルタがない
-   - 過去のテスト実行で作成された6件のテストデータも集計されていた
-
-3. **テストデータの残留**
-   - conftest.pyにクリーンアップ処理は存在
-   - しかし過去の6件のテストデータが蓄積されていた
-
-## 修正内容
-
-### 1. WelfareRecipientService.get_deadline_alerts
-**ファイル**: `app/services/welfare_recipient_service.py`
-
-```python
-# テスト環境かどうかをチェック
-is_testing = os.getenv("TESTING") == "1"
-
-# 更新期限アラートクエリ
-renewal_conditions = [
-    SupportPlanCycle.office_id == office_id,
-    SupportPlanCycle.is_latest_cycle == True,
-    SupportPlanCycle.next_renewal_deadline.isnot(None),
-    SupportPlanCycle.next_renewal_deadline <= threshold_date
-]
-if not is_testing:
-    renewal_conditions.append(WelfareRecipient.is_test_data == False)
-
-# アセスメント未完了アラートクエリ
-assessment_conditions = [
-    SupportPlanCycle.office_id == office_id,
-    SupportPlanCycle.is_latest_cycle == True
-]
-if not is_testing:
-    assessment_conditions.append(WelfareRecipient.is_test_data == False)
-```
-
-### 2. deadline_notification.send_deadline_alert_emails
-**ファイル**: `app/tasks/deadline_notification.py`
-
-```python
-# テスト環境かどうかをチェック
-is_testing = os.getenv("TESTING") == "1"
-
-# Office取得クエリ
-office_conditions = [Office.deleted_at.is_(None)]
-if not is_testing:
-    office_conditions.append(Office.is_test_data == False)
-
-# Staff取得クエリ
-staff_conditions = [
-    OfficeStaff.office_id == office.id,
-    Staff.deleted_at.is_(None),
-    Staff.email.isnot(None)
-]
-if not is_testing:
-    staff_conditions.append(Staff.is_test_data == False)
-```
+# 本番環境ログ
+2026-01-25T02:09:29.5287760Z =========================== short test summary info ============================
+2026-01-25T02:09:29.5288120Z FAILED tests/tasks/test_deadline_notification.py::test_send_deadline_alert_emails_dry_run - assert 7 == 1
+2026-01-25T02:09:29.5288474Z FAILED tests/tasks/test_deadline_notification.py::test_send_deadline_alert_emails_no_alerts - assert 6 == 0
+2026-01-25T02:09:29.5288938Z FAILED tests/tasks/test_deadline_notification.py::test_send_deadline_alert_emails_with_threshold_filtering - assert 7 == 1
+2026-01-25T02:09:29.5289346Z FAILED tests/tasks/test_deadline_notification.py::test_send_deadline_alert_emails_email_notification_disabled - assert 6 == 0
+2026-01-25T02:09:29.5289754Z FAILED tests/tasks/test_deadline_notification.py::test_send_deadline_alert_emails_multiple_thresholds - assert 8 == 2
+2026-01-25T02:09:29.5290126Z FAILED tests/tasks/test_deadline_notification.py::test_send_deadline_alert_emails_default_threshold - assert 7 == 1
+2026-01-25T02:09:29.5290801Z FAILED tests/tasks/test_deadline_notification_web_push.py::test_push_sent_when_system_notification_enabled - AssertionError: メールが1件送信される
+2026-01-25T02:09:29.5290982Z assert 7 == 1
+2026-01-25T02:09:29.5291528Z FAILED tests/tasks/test_deadline_notification_web_push.py::test_push_skipped_when_system_notification_disabled - AssertionError: メールは送信される
+2026-01-25T02:09:29.5291674Z assert 7 == 1
+2026-01-25T02:09:29.5292190Z FAILED tests/tasks/test_deadline_notification_web_push.py::test_push_threshold_filtering - AssertionError: メールは1件（両方の利用者を含む）
+2026-01-25T02:09:29.5292326Z assert 7 == 1
+2026-01-25T02:09:29.5292769Z FAILED tests/tasks/test_deadline_notification_web_push.py::test_push_multiple_devices - AssertionError: メールが1件送信される
+2026-01-25T02:09:29.5292907Z assert 7 == 1
+2026-01-25T02:09:29.5293419Z FAILED tests/tasks/test_deadline_notification_web_push.py::test_push_subscription_cleanup_on_expired - AssertionError: メールが1件送信される
+2026-01-25T02:09:29.5293551Z assert 7 == 1
+2026-01-25T02:09:29.5294032Z FAILED tests/tasks/test_deadline_notification_web_push.py::test_push_failure_does_not_affect_email - AssertionError: メールは送信される
+2026-01-25T02:09:29.5294167Z assert 7 == 1
+2026-01-25T02:09:29.5294700Z FAILED tests/tasks/test_deadline_notification_web_push.py::test_dry_run_skips_push_sending - AssertionError: メールカウントは1（dry_runでもカウント）
+2026-01-25T02:09:29.5294834Z assert 7 == 1
+2026-01-25T02:09:29.5295542Z FAILED tests/test_database_connection.py::TestDatabaseIsolation::test_environment_variable_priority - AssertionError: TEST_DATABASE_URL and DATABASE_URL are the same! Tests should use a separate database.
+2026-01-25T02:09:29.5296834Z assert '***' != '***'
+2026-01-25T02:09:29.5297087Z ==== 14 failed, 1762 passed, 72 skipped, 164 warnings in 1314.76s (0:21:54) ====
 
 
-### 4. PushSubscriptionへのis_test_data追加は不要
+# 一部エラーの詳細
+- とても長いログが発生
 
-理由：
-- PushSubscriptionはStaffに従属
-- Staffクエリで `is_test_data=False` フィルタ済み
-- 親でフィルタされているため、子テーブルへのカラム追加は不要
+2026-01-25T02:09:29.3212169Z _______________________ test_dry_run_skips_push_sending ________________________
+2026-01-25T02:09:29.3212785Z tests/tasks/test_deadline_notification_web_push.py:557: in test_dry_run_skips_push_sending
+2026-01-25T02:09:29.3213586Z     assert result["email_sent"] == 1, "メールカウントは1（dry_runでもカウント）"
+2026-01-25T02:09:29.3214100Z E   AssertionError: メールカウントは1（dry_runでもカウント）
+2026-01-25T02:09:29.3214502Z E   assert 7 == 1
+2026-01-25T02:09:29.3214935Z ------------------------------ Captured log setup ------------------------------
+2026-01-25T02:09:29.3215498Z INFO     sqlalchemy.engine.Engine:base.py:2698 BEGIN (implicit)
+2026-01-25T02:09:29.3216045Z INFO     sqlalchemy.engine.Engine:base.py:1842 SAVEPOINT sa_savepoint_1
+2026-01-25T02:09:29.3216616Z INFO     sqlalchemy.engine.Engine:base.py:1842 [no key 0.00013s] ***
+2026-01-25T02:09:29.3217164Z INFO     sqlalchemy.engine.Engine:base.py:1842 SAVEPOINT sa_savepoint_2
+2026-01-25T02:09:29.3217719Z INFO     sqlalchemy.engine.Engine:base.py:1842 [no key 0.00019s] ***
+2026-01-25T02:09:29.3221998Z INFO     sqlalchemy.engine.Engine:base.py:1842 INSERT INTO staffs (email, hashed_password, name, last_name, first_name, last_name_furigana, first_name_furigana, full_name, role, is_email_verified, is_mfa_enabled, is_mfa_verified_by_user, mfa_secret, mfa_backup_codes_used, password_changed_at, failed_password_attempts, is_locked, locked_at, hashed_passphrase, passphrase_changed_at, is_deleted, deleted_at, deleted_by, is_test_data) VALUES (%(email)s::VARCHAR, %(hashed_password)s::VARCHAR, %(name)s::VARCHAR, %(last_name)s::VARCHAR, %(first_name)s::VARCHAR, %(last_name_furigana)s::VARCHAR, %(first_name_furigana)s::VARCHAR, %(full_name)s::VARCHAR, %(role)s, %(is_email_verified)s, %(is_mfa_enabled)s, %(is_mfa_verified_by_user)s, %(mfa_secret)s::VARCHAR, %(mfa_backup_codes_used)s::INTEGER, %(password_changed_at)s::TIMESTAMP WITH TIME ZONE, %(failed_password_attempts)s::INTEGER, %(is_locked)s, %(locked_at)s::TIMESTAMP WITH TIME ZONE, %(hashed_passphrase)s::VARCHAR, %(passphrase_changed_at)s::TIMESTAMP WITH TIME ZONE, %(is_deleted)s, %(deleted_at)s::TIMESTAMP WITH TIME ZONE, %(deleted_by)s::UUID, %(is_test_data)s) RETURNING staffs.id, staffs.created_at, staffs.updated_at, staffs.notification_preferences
+2026-01-25T02:09:29.3228648Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 974.3s ago] ***'email': 'admin_27a158eb3eac43b29794c6da2ac2a6b2_1769***6929659087_1@example.com', 'hashed_password': '$2b$12$IkzZjdG9d014Pth6iUC93OUWPp8iH1t0q3jB5tP6Tba3KG7/gm6yi', 'name': None, 'last_name': 'テスト', 'first_name': '管理者', 'last_name_furigana': None, 'first_name_furigana': None, 'full_name': 'テスト 管理者', 'role': 'owner', 'is_email_verified': True, 'is_mfa_enabled': False, 'is_mfa_verified_by_user': False, 'mfa_secret': None, 'mfa_backup_codes_used': 0, 'password_changed_at': None, 'failed_password_attempts': 0, 'is_locked': False, 'locked_at': None, 'hashed_passphrase': None, 'passphrase_changed_at': None, 'is_deleted': False, 'deleted_at': None, 'deleted_by': None, 'is_test_data': True***
+2026-01-25T02:09:29.3231383Z INFO     sqlalchemy.engine.Engine:base.py:1842 SAVEPOINT sa_savepoint_3
+2026-01-25T02:09:29.3231962Z INFO     sqlalchemy.engine.Engine:base.py:1842 [no key 0.00019s] ***
+2026-01-25T02:09:29.3234437Z INFO     sqlalchemy.engine.Engine:base.py:1842 SELECT staffs.id, staffs.email, staffs.hashed_password, staffs.name, staffs.last_name, staffs.first_name, staffs.last_name_furigana, staffs.first_name_furigana, staffs.full_name, staffs.role, staffs.is_email_verified, staffs.is_mfa_enabled, staffs.is_mfa_verified_by_user, staffs.mfa_secret, staffs.mfa_backup_codes_used, staffs.password_changed_at, staffs.failed_password_attempts, staffs.is_locked, staffs.locked_at, staffs.hashed_passphrase, staffs.passphrase_changed_at, staffs.is_deleted, staffs.deleted_at, staffs.deleted_by, staffs.created_at, staffs.updated_at, staffs.is_test_data, staffs.notification_preferences 
+2026-01-25T02:09:29.3236732Z FROM staffs 
+2026-01-25T02:09:29.3237067Z WHERE staffs.id = %(id_1)s::UUID
+2026-01-25T02:09:29.3237676Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 1270s ago] ***'id_1': UUID('80632549-a963-4013-85f0-c65e5a791189')***
+2026-01-25T02:09:29.3239581Z INFO     sqlalchemy.engine.Engine:base.py:1842 SELECT office_staffs.staff_id AS office_staffs_staff_id, office_staffs.id AS office_staffs_id, office_staffs.office_id AS office_staffs_office_id, office_staffs.is_primary AS office_staffs_is_primary, office_staffs.created_at AS office_staffs_created_at, office_staffs.updated_at AS office_staffs_updated_at, office_staffs.is_test_data AS office_staffs_is_test_data 
+2026-01-25T02:09:29.3241046Z FROM office_staffs 
+2026-01-25T02:09:29.3241450Z WHERE office_staffs.staff_id IN (%(primary_keys_1)s::UUID)
+2026-01-25T02:09:29.3242147Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 1270s ago] ***'primary_keys_1': UUID('80632549-a963-4013-85f0-c65e5a791189')***
+2026-01-25T02:09:29.3242881Z ------------------------------ Captured log call -------------------------------
+2026-01-25T02:09:29.3244915Z INFO     sqlalchemy.engine.Engine:base.py:1842 INSERT INTO offices (name, is_group, type, address, phone_number, email, created_by, last_modified_by, deactivated_at, is_test_data, is_deleted, deleted_at, deleted_by) VALUES (%(name)s::VARCHAR, %(is_group)s, %(type)s, %(address)s::VARCHAR, %(phone_number)s::VARCHAR, %(email)s::VARCHAR, %(created_by)s::UUID, %(last_modified_by)s::UUID, %(deactivated_at)s::TIMESTAMP WITH TIME ZONE, %(is_test_data)s, %(is_deleted)s, %(deleted_at)s::TIMESTAMP WITH TIME ZONE, %(deleted_by)s::UUID) RETURNING offices.id, offices.created_at, offices.updated_at
+2026-01-25T02:09:29.3248200Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 1270s ago] ***'name': 'テスト事業所1', 'is_group': False, 'type': 'type_A_office', 'address': None, 'phone_number': None, 'email': None, 'created_by': UUID('80632549-a963-4013-85f0-c65e5a791189'), 'last_modified_by': UUID('80632549-a963-4013-85f0-c65e5a791189'), 'deactivated_at': None, 'is_test_data': True, 'is_deleted': False, 'deleted_at': None, 'deleted_by': None***
+2026-01-25T02:09:29.3250662Z INFO     sqlalchemy.engine.Engine:base.py:1842 SELECT offices.id, offices.name, offices.is_group, offices.type, offices.address, offices.phone_number, offices.email, offices.created_by, offices.last_modified_by, offices.deactivated_at, offices.created_at, offices.updated_at, offices.is_test_data, offices.is_deleted, offices.deleted_at, offices.deleted_by 
+2026-01-25T02:09:29.3252041Z FROM offices 
+2026-01-25T02:09:29.3252383Z WHERE offices.id = %(pk_1)s::UUID
+2026-01-25T02:09:29.3253001Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 1270s ago] ***'pk_1': UUID('d174524e-c4***-47cb-99db-520451f267b6')***
+2026-01-25T02:09:29.3257090Z INFO     sqlalchemy.engine.Engine:base.py:1842 INSERT INTO staffs (email, hashed_password, name, last_name, first_name, last_name_furigana, first_name_furigana, full_name, role, is_email_verified, is_mfa_enabled, is_mfa_verified_by_user, mfa_secret, mfa_backup_codes_used, password_changed_at, failed_password_attempts, is_locked, locked_at, hashed_passphrase, passphrase_changed_at, is_deleted, deleted_at, deleted_by, is_test_data) VALUES (%(email)s::VARCHAR, %(hashed_password)s::VARCHAR, %(name)s::VARCHAR, %(last_name)s::VARCHAR, %(first_name)s::VARCHAR, %(last_name_furigana)s::VARCHAR, %(first_name_furigana)s::VARCHAR, %(full_name)s::VARCHAR, %(role)s, %(is_email_verified)s, %(is_mfa_enabled)s, %(is_mfa_verified_by_user)s, %(mfa_secret)s::VARCHAR, %(mfa_backup_codes_used)s::INTEGER, %(password_changed_at)s::TIMESTAMP WITH TIME ZONE, %(failed_password_attempts)s::INTEGER, %(is_locked)s, %(locked_at)s::TIMESTAMP WITH TIME ZONE, %(hashed_passphrase)s::VARCHAR, %(passphrase_changed_at)s::TIMESTAMP WITH TIME ZONE, %(is_deleted)s, %(deleted_at)s::TIMESTAMP WITH TIME ZONE, %(deleted_by)s::UUID, %(is_test_data)s) RETURNING staffs.id, staffs.created_at, staffs.updated_at, staffs.notification_preferences
+2026-01-25T02:09:29.3263500Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 936.3s ago] ***'email': 'test.staff@example.com', 'hashed_password': '$2b$12$oNgK/3ptt.aZ5KrKbZLX/.1XZLZ5.8k5gCPT9PJL9QuReSLH9dVTm', 'name': None, 'last_name': 'テスト1', 'first_name': 'スタッフ', 'last_name_furigana': None, 'first_name_furigana': None, 'full_name': 'テスト1 スタッフ', 'role': 'employee', 'is_email_verified': True, 'is_mfa_enabled': False, 'is_mfa_verified_by_user': False, 'mfa_secret': None, 'mfa_backup_codes_used': 0, 'password_changed_at': None, 'failed_password_attempts': 0, 'is_locked': False, 'locked_at': None, 'hashed_passphrase': None, 'passphrase_changed_at': None, 'is_deleted': False, 'deleted_at': None, 'deleted_by': None, 'is_test_data': True***
+2026-01-25T02:09:29.3266459Z INFO     sqlalchemy.engine.Engine:base.py:1842 INSERT INTO office_staffs (staff_id, office_id, is_primary, is_test_data) VALUES (%(staff_id)s::UUID, %(office_id)s::UUID, %(is_primary)s, %(is_test_data)s) RETURNING office_staffs.id, office_staffs.created_at, office_staffs.updated_at
+2026-01-25T02:09:29.3268091Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 1271s ago] ***'staff_id': UUID('eb7f28e3-76c5-4b78-acc5-2c1512f35a2a'), 'office_id': UUID('d174524e-c4***-47cb-99db-520451f267b6'), 'is_primary': True, 'is_test_data': True***
+2026-01-25T02:09:29.3271001Z INFO     sqlalchemy.engine.Engine:base.py:1842 SELECT staffs.id, staffs.email, staffs.hashed_password, staffs.name, staffs.last_name, staffs.first_name, staffs.last_name_furigana, staffs.first_name_furigana, staffs.full_name, staffs.role, staffs.is_email_verified, staffs.is_mfa_enabled, staffs.is_mfa_verified_by_user, staffs.mfa_secret, staffs.mfa_backup_codes_used, staffs.password_changed_at, staffs.failed_password_attempts, staffs.is_locked, staffs.locked_at, staffs.hashed_passphrase, staffs.passphrase_changed_at, staffs.is_deleted, staffs.deleted_at, staffs.deleted_by, staffs.created_at, staffs.updated_at, staffs.is_test_data, staffs.notification_preferences 
+2026-01-25T02:09:29.3273269Z FROM staffs 
+2026-01-25T02:09:29.3273598Z WHERE staffs.id = %(id_1)s::UUID
+2026-01-25T02:09:29.3274214Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 1270s ago] ***'id_1': UUID('eb7f28e3-76c5-4b78-acc5-2c1512f35a2a')***
+2026-01-25T02:09:29.3275940Z INFO     sqlalchemy.engine.Engine:base.py:1842 SELECT office_staffs.staff_id AS office_staffs_staff_id, office_staffs.id AS office_staffs_id, office_staffs.office_id AS office_staffs_office_id, office_staffs.is_primary AS office_staffs_is_primary, office_staffs.created_at AS office_staffs_created_at, office_staffs.updated_at AS office_staffs_updated_at, office_staffs.is_test_data AS office_staffs_is_test_data 
+2026-01-25T02:09:29.3277440Z FROM office_staffs 
+2026-01-25T02:09:29.3277839Z WHERE office_staffs.staff_id IN (%(primary_keys_1)s::UUID)
+2026-01-25T02:09:29.3278545Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 1270s ago] ***'primary_keys_1': UUID('eb7f28e3-76c5-4b78-acc5-2c1512f35a2a')***
+2026-01-25T02:09:29.3281322Z INFO     sqlalchemy.engine.Engine:base.py:1842 SELECT offices.id AS offices_id, offices.name AS offices_name, offices.is_group AS offices_is_group, offices.type AS offices_type, offices.address AS offices_address, offices.phone_number AS offices_phone_number, offices.email AS offices_email, offices.created_by AS offices_created_by, offices.last_modified_by AS offices_last_modified_by, offices.deactivated_at AS offices_deactivated_at, offices.created_at AS offices_created_at, offices.updated_at AS offices_updated_at, offices.is_test_data AS offices_is_test_data, offices.is_deleted AS offices_is_deleted, offices.deleted_at AS offices_deleted_at, offices.deleted_by AS offices_deleted_by 
+2026-01-25T02:09:29.3283658Z FROM offices 
+2026-01-25T02:09:29.3284020Z WHERE offices.id IN (%(primary_keys_1)s::UUID)
+2026-01-25T02:09:29.3284718Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 1270s ago] ***'primary_keys_1': UUID('d174524e-c4***-47cb-99db-520451f267b6')***
+2026-01-25T02:09:29.3285797Z INFO     sqlalchemy.engine.Engine:base.py:1842 UPDATE staffs SET updated_at=now(), notification_preferences=%(notification_preferences)s::JSONB WHERE staffs.id = %(staffs_id)s::UUID
+2026-01-25T02:09:29.3287107Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 847.8s ago] ***'notification_preferences': Jsonb(***'in_app_notification': True, 'emai ... (141 chars)), 'staffs_id': UUID('eb7f28e3-76c5-4b78-acc5-2c1512f35a2a')***
+2026-01-25T02:09:29.3289043Z INFO     sqlalchemy.engine.Engine:base.py:1842 INSERT INTO push_subscriptions (staff_id, endpoint, p256dh_key, auth_key, user_agent) VALUES (%(staff_id)s::UUID, %(endpoint)s::VARCHAR, %(p256dh_key)s::VARCHAR, %(auth_key)s::VARCHAR, %(user_agent)s::VARCHAR) RETURNING push_subscriptions.id, push_subscriptions.created_at, push_subscriptions.updated_at
+2026-01-25T02:09:29.3291213Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 909.2s ago] ***'staff_id': UUID('eb7f28e3-76c5-4b78-acc5-2c1512f35a2a'), 'endpoint': 'https://fcm.googleapis.com/fcm/send/test-endpoint-123', 'p256dh_key': 'BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQ', 'auth_key': 'tBHItJI5svbpez7KI4CCXg', 'user_agent': None***
+2026-01-25T02:09:29.3293623Z INFO     sqlalchemy.engine.Engine:base.py:1842 INSERT INTO welfare_recipients (id, first_name, last_name, first_name_furigana, last_name_furigana, birth_day, gender, is_test_data) VALUES (%(id)s::UUID, %(first_name)s::VARCHAR, %(last_name)s::VARCHAR, %(first_name_furigana)s::VARCHAR, %(last_name_furigana)s::VARCHAR, %(birth_day)s::DATE, %(gender)s, %(is_test_data)s) RETURNING welfare_recipients.created_at, welfare_recipients.updated_at
+2026-01-25T02:09:29.3296202Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 1172s ago] ***'id': UUID('f1acffd9-ac***-4b22-a17f-14e6d2ea0545'), 'first_name': '太郎', 'last_name': 'テスト1', 'first_name_furigana': 'たろう', 'last_name_furigana': 'テスト1', 'birth_day': datetime.date(1990, 1, 1), 'gender': 'male', 'is_test_data': True***
+2026-01-25T02:09:29.3298093Z INFO     sqlalchemy.engine.Engine:base.py:1842 INSERT INTO office_welfare_recipients (id, welfare_recipient_id, office_id, is_test_data) VALUES (%(id)s::UUID, %(welfare_recipient_id)s::UUID, %(office_id)s::UUID, %(is_test_data)s) RETURNING office_welfare_recipients.created_at, office_welfare_recipients.updated_at
+2026-01-25T02:09:29.3300196Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 1172s ago] ***'id': UUID('f9ca2e07-b605-468d-a061-6a04f3f31f0b'), 'welfare_recipient_id': UUID('f1acffd9-ac***-4b22-a17f-14e6d2ea0545'), 'office_id': UUID('d174524e-c4***-47cb-99db-520451f267b6'), 'is_test_data': True***
+2026-01-25T02:09:29.3302334Z INFO     sqlalchemy.engine.Engine:base.py:1842 SELECT welfare_recipients.id, welfare_recipients.first_name, welfare_recipients.last_name, welfare_recipients.first_name_furigana, welfare_recipients.last_name_furigana, welfare_recipients.birth_day, welfare_recipients.gender, welfare_recipients.created_at, welfare_recipients.updated_at, welfare_recipients.is_test_data 
+2026-01-25T02:09:29.3303756Z FROM welfare_recipients 
+2026-01-25T02:09:29.3304826Z WHERE welfare_recipients.id = %(pk_1)s::UUID
+2026-01-25T02:09:29.3305549Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 1213s ago] ***'pk_1': UUID('f1acffd9-ac***-4b22-a17f-14e6d2ea0545')***
+2026-01-25T02:09:29.3308386Z INFO     sqlalchemy.engine.Engine:base.py:1842 INSERT INTO support_plan_cycles (welfare_recipient_id, office_id, plan_cycle_start_date, final_plan_signed_date, next_renewal_deadline, is_latest_cycle, cycle_number, next_plan_start_date, google_calendar_id, google_event_id, google_event_url, is_test_data) VALUES (%(welfare_recipient_id)s::UUID, %(office_id)s::UUID, %(plan_cycle_start_date)s::DATE, %(final_plan_signed_date)s::DATE, %(next_renewal_deadline)s::DATE, %(is_latest_cycle)s, %(cycle_number)s::INTEGER, %(next_plan_start_date)s::INTEGER, %(google_calendar_id)s::VARCHAR, %(google_event_id)s::VARCHAR, %(google_event_url)s::VARCHAR, %(is_test_data)s) RETURNING support_plan_cycles.id, support_plan_cycles.created_at, support_plan_cycles.updated_at
+2026-01-25T02:09:29.3312564Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 1113s ago] ***'welfare_recipient_id': UUID('f1acffd9-ac***-4b22-a17f-14e6d2ea0545'), 'office_id': UUID('d174524e-c4***-47cb-99db-520451f267b6'), 'plan_cycle_start_date': None, 'final_plan_signed_date': None, 'next_renewal_deadline': datetime.date(2026, 1, ***), 'is_latest_cycle': True, 'cycle_number': 1, 'next_plan_start_date': 7, 'google_calendar_id': None, 'google_event_id': None, 'google_event_url': None, 'is_test_data': False***
+2026-01-25T02:09:29.3314652Z INFO     app.tasks.deadline_notification:deadline_notification.py:113 [DEADLINE_NOTIFICATION] Starting deadline alert email notification
+2026-01-25T02:09:29.3316299Z INFO     sqlalchemy.engine.Engine:base.py:1842 SELECT offices.id, offices.name, offices.is_group, offices.type, offices.address, offices.phone_number, offices.email, offices.created_by, offices.last_modified_by, offices.deactivated_at, offices.created_at, offices.updated_at, offices.is_test_data, offices.is_deleted, offices.deleted_at, offices.deleted_by 
+2026-01-25T02:09:29.3317619Z FROM offices 
+2026-01-25T02:09:29.3317940Z WHERE offices.deleted_at IS NULL
+2026-01-25T02:09:29.3318430Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 133.7s ago] ***
+2026-01-25T02:09:29.3319377Z INFO     app.tasks.deadline_notification:deadline_notification.py:129 [DEADLINE_NOTIFICATION] Found 121 active offices
+2026-01-25T02:09:29.3322923Z INFO     sqlalchemy.engine.Engine:base.py:1842 SELECT welfare_recipients.id, welfare_recipients.first_name, welfare_recipients.last_name, welfare_recipients.first_name_furigana, welfare_recipients.last_name_furigana, welfare_recipients.birth_day, welfare_recipients.gender, welfare_recipients.created_at, welfare_recipients.updated_at, welfare_recipients.is_test_data, support_plan_cycles.id AS id_1, support_plan_cycles.welfare_recipient_id, support_plan_cycles.office_id, support_plan_cycles.plan_cycle_start_date, support_plan_cycles.final_plan_signed_date, support_plan_cycles.next_renewal_deadline, support_plan_cycles.is_latest_cycle, support_plan_cycles.cycle_number, support_plan_cycles.next_plan_start_date, support_plan_cycles.google_calendar_id, support_plan_cycles.google_event_id, support_plan_cycles.google_event_url, support_plan_cycles.created_at AS created_at_1, support_plan_cycles.updated_at AS updated_at_1, support_plan_cycles.is_test_data AS is_test_data_1 
+2026-01-25T02:09:29.3326595Z FROM welfare_recipients JOIN support_plan_cycles ON support_plan_cycles.welfare_recipient_id = welfare_recipients.id 
+2026-01-25T02:09:29.3328289Z WHERE support_plan_cycles.office_id = %(office_id_1)s::UUID AND support_plan_cycles.is_latest_cycle = *** AND support_plan_cycles.next_renewal_deadline IS NOT NULL AND support_plan_cycles.next_renewal_deadline <= %(next_renewal_deadline_1)s::DATE ORDER BY support_plan_cycles.next_renewal_deadline ASC, welfare_recipients.last_name ASC, welfare_recipients.first_name ASC
+2026-01-25T02:09:29.3330251Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 1109s ago] ***'office_id_1': UUID('31186702-9fcb-481f-ad87-e45e33c950b1'), 'next_renewal_deadline_1': datetime.date(2026, 2, 24)***
+2026-01-25T02:09:29.3334032Z INFO     sqlalchemy.engine.Engine:base.py:1842 SELECT welfare_recipients.id, welfare_recipients.first_name, welfare_recipients.last_name, welfare_recipients.first_name_furigana, welfare_recipients.last_name_furigana, welfare_recipients.birth_day, welfare_recipients.gender, welfare_recipients.created_at, welfare_recipients.updated_at, welfare_recipients.is_test_data, support_plan_cycles.id AS id_1, support_plan_cycles.welfare_recipient_id, support_plan_cycles.office_id, support_plan_cycles.plan_cycle_start_date, support_plan_cycles.final_plan_signed_date, support_plan_cycles.next_renewal_deadline, support_plan_cycles.is_latest_cycle, support_plan_cycles.cycle_number, support_plan_cycles.next_plan_start_date, support_plan_cycles.google_calendar_id, support_plan_cycles.google_event_id, support_plan_cycles.google_event_url, support_plan_cycles.created_at AS created_at_1, support_plan_cycles.updated_at AS updated_at_1, support_plan_cycles.is_test_data AS is_test_data_1 
+2026-01-25T02:09:29.3337570Z FROM welfare_recipients JOIN support_plan_cycles ON support_plan_cycles.welfare_recipient_id = welfare_recipients.id 
+2026-01-25T02:09:29.3338687Z WHERE support_plan_cycles.office_id = %(office_id_1)s::UUID AND support_plan_cycles.is_latest_cycle = *** ORDER BY welfare_recipients.last_name ASC, welfare_recipients.first_name ASC
+2026-01-25T02:09:29.3339746Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 1109s ago] ***'office_id_1': UUID('31186702-9fcb-481f-ad87-e45e33c950b1')***
+2026-01-25T02:09:29.3343320Z INFO     sqlalchemy.engine.Engine:base.py:1842 SELECT welfare_recipients.id, welfare_recipients.first_name, welfare_recipients.last_name, welfare_recipients.first_name_furigana, welfare_recipients.last_name_furigana, welfare_recipients.birth_day, welfare_recipients.gender, welfare_recipients.created_at, welfare_recipients.updated_at, welfare_recipients.is_test_data, support_plan_cycles.id AS id_1, support_plan_cycles.welfare_recipient_id, support_plan_cycles.office_id, support_plan_cycles.plan_cycle_start_date, support_plan_cycles.final_plan_signed_date, support_plan_cycles.next_renewal_deadline, support_plan_cycles.is_latest_cycle, support_plan_cycles.cycle_number, support_plan_cycles.next_plan_start_date, support_plan_cycles.google_calendar_id, support_plan_cycles.google_event_id, support_plan_cycles.google_event_url, support_plan_cycles.created_at AS created_at_1, support_plan_cycles.updated_at AS updated_at_1, support_plan_cycles.is_test_data AS is_test_data_1 
+2026-01-25T02:09:29.3346823Z FROM welfare_recipients JOIN support_plan_cycles ON support_plan_cycles.welfare_recipient_id = welfare_recipients.id 
+2026-01-25T02:09:29.3348442Z WHERE support_plan_cycles.office_id = %(office_id_1)s::UUID AND support_plan_cycles.is_latest_cycle = *** AND support_plan_cycles.next_renewal_deadline IS NOT NULL AND support_plan_cycles.next_renewal_deadline <= %(next_renewal_deadline_1)s::DATE ORDER BY support_plan_cycles.next_renewal_deadline ASC, welfare_recipients.last_name ASC, welfare_recipients.first_name ASC
+2026-01-25T02:09:29.3350289Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 1109s ago] ***'office_id_1': UUID('d174524e-c4***-47cb-99db-520451f267b6'), 'next_renewal_deadline_1': datetime.date(2026, 2, 24)***
+2026-01-25T02:09:29.3354030Z INFO     sqlalchemy.engine.Engine:base.py:1842 SELECT welfare_recipients.id, welfare_recipients.first_name, welfare_recipients.last_name, welfare_recipients.first_name_furigana, welfare_recipients.last_name_furigana, welfare_recipients.birth_day, welfare_recipients.gender, welfare_recipients.created_at, welfare_recipients.updated_at, welfare_recipients.is_test_data, support_plan_cycles.id AS id_1, support_plan_cycles.welfare_recipient_id, support_plan_cycles.office_id, support_plan_cycles.plan_cycle_start_date, support_plan_cycles.final_plan_signed_date, support_plan_cycles.next_renewal_deadline, support_plan_cycles.is_latest_cycle, support_plan_cycles.cycle_number, support_plan_cycles.next_plan_start_date, support_plan_cycles.google_calendar_id, support_plan_cycles.google_event_id, support_plan_cycles.google_event_url, support_plan_cycles.created_at AS created_at_1, support_plan_cycles.updated_at AS updated_at_1, support_plan_cycles.is_test_data AS is_test_data_1 
+2026-01-25T02:09:29.3357560Z FROM welfare_recipients JOIN support_plan_cycles ON support_plan_cycles.welfare_recipient_id = welfare_recipients.id 
+2026-01-25T02:09:29.3358662Z WHERE support_plan_cycles.office_id = %(office_id_1)s::UUID AND support_plan_cycles.is_latest_cycle = *** ORDER BY welfare_recipients.last_name ASC, welfare_recipients.first_name ASC
+2026-01-25T02:09:29.3359822Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 1109s ago] ***'office_id_1': UUID('d174524e-c4***-47cb-99db-520451f267b6')***
+2026-01-25T02:09:29.3362168Z INFO     sqlalchemy.engine.Engine:base.py:1842 SELECT plan_deliverables.plan_cycle_id AS plan_deliverables_plan_cycle_id, plan_deliverables.id AS plan_deliverables_id, plan_deliverables.deliverable_type AS plan_deliverables_deliverable_type, plan_deliverables.file_path AS plan_deliverables_file_path, plan_deliverables.original_filename AS plan_deliverables_original_filename, plan_deliverables.uploaded_by AS plan_deliverables_uploaded_by, plan_deliverables.uploaded_at AS plan_deliverables_uploaded_at, plan_deliverables.is_test_data AS plan_deliverables_is_test_data 
+2026-01-25T02:09:29.3364216Z FROM plan_deliverables 
+2026-01-25T02:09:29.3364668Z WHERE plan_deliverables.plan_cycle_id IN (%(primary_keys_1)s::INTEGER)
+2026-01-25T02:09:29.3365308Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 1109s ago] ***'primary_keys_1': 14525***
+2026-01-25T02:09:29.3366640Z INFO     app.tasks.deadline_notification:deadline_notification.py:162 [DEADLINE_NOTIFICATION] Office テスト事業所1 (ID: d174524e-c4***-47cb-99db-520451f267b6): 1 renewal alerts, 1 assessment alerts (max threshold: *** days)
+2026-01-25T02:09:29.3369624Z INFO     sqlalchemy.engine.Engine:base.py:1842 SELECT staffs.id, staffs.email, staffs.hashed_password, staffs.name, staffs.last_name, staffs.first_name, staffs.last_name_furigana, staffs.first_name_furigana, staffs.full_name, staffs.role, staffs.is_email_verified, staffs.is_mfa_enabled, staffs.is_mfa_verified_by_user, staffs.mfa_secret, staffs.mfa_backup_codes_used, staffs.password_changed_at, staffs.failed_password_attempts, staffs.is_locked, staffs.locked_at, staffs.hashed_passphrase, staffs.passphrase_changed_at, staffs.is_deleted, staffs.deleted_at, staffs.deleted_by, staffs.created_at, staffs.updated_at, staffs.is_test_data, staffs.notification_preferences 
+2026-01-25T02:09:29.3372001Z FROM staffs JOIN office_staffs ON office_staffs.staff_id = staffs.id 
+2026-01-25T02:09:29.3372672Z WHERE office_staffs.office_id = %(office_id_1)s::UUID AND staffs.deleted_at IS NULL AND staffs.email IS NOT NULL
+2026-01-25T02:09:29.3373520Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 131.4s ago] ***'office_id_1': UUID('d174524e-c4***-47cb-99db-520451f267b6')***
+2026-01-25T02:09:29.3374726Z INFO     app.tasks.deadline_notification:deadline_notification.py:192 [DEADLINE_NOTIFICATION] Office テスト事業所1 (ID: d174524e-c4***-47cb-99db-520451f267b6): Processing 1 staff members
+2026-01-25T02:09:29.3376068Z INFO     app.tasks.deadline_notification:deadline_notification.py:234 [DEADLINE_NOTIFICATION] Staff t***@example.com (テスト1 スタッフ): 1 renewal alerts, 1 assessment alerts (threshold: *** days)
+2026-01-25T02:09:29.3377345Z INFO     app.tasks.deadline_notification:deadline_notification.py:241 [DRY RUN] Would send email to t***@example.com (テスト1 スタッフ) - threshold: *** days
+2026-01-25T02:09:29.3378918Z INFO     sqlalchemy.engine.Engine:base.py:1842 SELECT push_subscriptions.id, push_subscriptions.staff_id, push_subscriptions.endpoint, push_subscriptions.p256dh_key, push_subscriptions.auth_key, push_subscriptions.user_agent, push_subscriptions.created_at, push_subscriptions.updated_at 
+2026-01-25T02:09:29.3380093Z FROM push_subscriptions 
+2026-01-25T02:09:29.3380511Z WHERE push_subscriptions.staff_id = %(staff_id_1)s::UUID
+2026-01-25T02:09:29.3381199Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 902.3s ago] ***'staff_id_1': UUID('eb7f28e3-76c5-4b78-acc5-2c1512f35a2a')***
+2026-01-25T02:09:29.3382369Z INFO     app.tasks.deadline_notification:deadline_notification.py:321 [WEB_PUSH] Staff t***@example.com (テスト1 スタッフ): 1 device(s), 1 renewal alerts, 1 assessment alerts (threshold: 10 days)
+2026-01-25T02:09:29.3383589Z INFO     app.tasks.deadline_notification:deadline_notification.py:335 [DRY RUN] Would send push to device: https://fcm.googleapis.com/fcm/send/test-endpoint-... - threshold: 10 days
+2026-01-25T02:09:29.3387380Z INFO     sqlalchemy.engine.Engine:base.py:1842 SELECT welfare_recipients.id, welfare_recipients.first_name, welfare_recipients.last_name, welfare_recipients.first_name_furigana, welfare_recipients.last_name_furigana, welfare_recipients.birth_day, welfare_recipients.gender, welfare_recipients.created_at, welfare_recipients.updated_at, welfare_recipients.is_test_data, support_plan_cycles.id AS id_1, support_plan_cycles.welfare_recipient_id, support_plan_cycles.office_id, support_plan_cycles.plan_cycle_start_date, support_plan_cycles.final_plan_signed_date, support_plan_cycles.next_renewal_deadline, support_plan_cycles.is_latest_cycle, support_plan_cycles.cycle_number, support_plan_cycles.next_plan_start_date, support_plan_cycles.google_calendar_id, support_plan_cycles.google_event_id, support_plan_cycles.google_event_url, support_plan_cycles.created_at AS created_at_1, support_plan_cycles.updated_at AS updated_at_1, support_plan_cycles.is_test_data AS is_test_data_1 
+2026-01-25T02:09:29.3390947Z FROM welfare_recipients JOIN support_plan_cycles ON support_plan_cycles.welfare_recipient_id = welfare_recipients.id 
+2026-01-25T02:09:29.3392575Z WHERE support_plan_cycles.office_id = %(office_id_1)s::UUID AND support_plan_cycles.is_latest_cycle = *** AND support_plan_cycles.next_renewal_deadline IS NOT NULL AND support_plan_cycles.next_renewal_deadline <= %(next_renewal_deadline_1)s::DATE ORDER BY support_plan_cycles.next_renewal_deadline ASC, welfare_recipients.last_name ASC, welfare_recipients.first_name ASC
+2026-01-25T02:09:29.3394369Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 1109s ago] ***'office_id_1': UUID('b52bf1b3-c8af-4c9f-8dc5-15e751948792'), 'next_renewal_deadline_1': datetime.date(2026, 2, 24)***
+2026-01-25T02:09:29.3398098Z INFO     sqlalchemy.engine.Engine:base.py:1842 SELECT welfare_recipients.id, welfare_recipients.first_name, welfare_recipients.last_name, welfare_recipients.first_name_furigana, welfare_recipients.last_name_furigana, welfare_recipients.birth_day, welfare_recipients.gender, welfare_recipients.created_at, welfare_recipients.updated_at, welfare_recipients.is_test_data, support_plan_cycles.id AS id_1, support_plan_cycles.welfare_recipient_id, support_plan_cycles.office_id, support_plan_cycles.plan_cycle_start_date, support_plan_cycles.final_plan_signed_date, support_plan_cycles.next_renewal_deadline, support_plan_cycles.is_latest_cycle, support_plan_cycles.cycle_number, support_plan_cycles.next_plan_start_date, support_plan_cycles.google_calendar_id, support_plan_cycles.google_event_id, support_plan_cycles.google_event_url, support_plan_cycles.created_at AS created_at_1, support_plan_cycles.updated_at AS updated_at_1, support_plan_cycles.is_test_data AS is_test_data_1 
+2026-01-25T02:09:29.3401810Z FROM welfare_recipients JOIN support_plan_cycles ON support_plan_cycles.welfare_recipient_id = welfare_recipients.id 
+2026-01-25T02:09:29.3402894Z WHERE support_plan_cycles.office_id = %(office_id_1)s::UUID AND support_plan_cycles.is_latest_cycle = *** ORDER BY welfare_recipients.last_name ASC, welfare_recipients.first_name ASC
+2026-01-25T02:09:29.3403940Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 1109s ago] ***'office_id_1': UUID('b52bf1b3-c8af-4c9f-8dc5-15e751948792')***
+2026-01-25T02:09:29.3407491Z INFO     sqlalchemy.engine.Engine:base.py:1842 SELECT welfare_recipients.id, welfare_recipients.first_name, welfare_recipients.last_name, welfare_recipients.first_name_furigana, welfare_recipients.last_name_furigana, welfare_recipients.birth_day, welfare_recipients.gender, welfare_recipients.created_at, welfare_recipients.updated_at, welfare_recipients.is_test_data, support_plan_cycles.id AS id_1, support_plan_cycles.welfare_recipient_id, support_plan_cycles.office_id, support_plan_cycles.plan_cycle_start_date, support_plan_cycles.final_plan_signed_date, support_plan_cycles.next_renewal_deadline, support_plan_cycles.is_latest_cycle, support_plan_cycles.cycle_number, support_plan_cycles.next_plan_start_date, support_plan_cycles.google_calendar_id, support_plan_cycles.google_event_id, support_plan_cycles.google_event_url, support_plan_cycles.created_at AS created_at_1, support_plan_cycles.updated_at AS updated_at_1, support_plan_cycles.is_test_data AS is_test_data_1 
+2026-01-25T02:09:29.3411280Z FROM welfare_recipients JOIN support_plan_cycles ON support_plan_cycles.welfare_recipient_id = welfare_recipients.id 
+2026-01-25T02:09:29.3412893Z WHERE support_plan_cycles.office_id = %(office_id_1)s::UUID AND support_plan_cycles.is_latest_cycle = *** AND support_plan_cycles.next_renewal_deadline IS NOT NULL AND support_plan_cycles.next_renewal_deadline <= %(next_renewal_deadline_1)s::DATE ORDER BY support_plan_cycles.next_renewal_deadline ASC, welfare_recipients.last_name ASC, welfare_recipients.first_name ASC
+2026-01-25T02:09:29.3414672Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 1109s ago] ***'office_id_1': UUID('9887c99d-2fd9-4abc-9771-58026acdb1a4'), 'next_renewal_deadline_1': datetime.date(2026, 2, 24)***
+2026-01-25T02:09:29.3418407Z INFO     sqlalchemy.engine.Engine:base.py:1842 SELECT welfare_recipients.id, welfare_recipients.first_name, welfare_recipients.last_name, welfare_recipients.first_name_furigana, welfare_recipients.last_name_furigana, welfare_recipients.birth_day, welfare_recipients.gender, welfare_recipients.created_at, welfare_recipients.updated_at, welfare_recipients.is_test_data, support_plan_cycles.id AS id_1, support_plan_cycles.welfare_recipient_id, support_plan_cycles.office_id, support_plan_cycles.plan_cycle_start_date, support_plan_cycles.final_plan_signed_date, support_plan_cycles.next_renewal_deadline, support_plan_cycles.is_latest_cycle, support_plan_cycles.cycle_number, support_plan_cycles.next_plan_start_date, support_plan_cycles.google_calendar_id, support_plan_cycles.google_event_id, support_plan_cycles.google_event_url, support_plan_cycles.created_at AS created_at_1, support_plan_cycles.updated_at AS updated_at_1, support_plan_cycles.is_test_data AS is_test_data_1 
+2026-01-25T02:09:29.3421965Z FROM welfare_recipients JOIN support_plan_cycles ON support_plan_cycles.welfare_recipient_id = welfare_recipients.id 
+2026-01-25T02:09:29.3423009Z WHERE support_plan_cycles.office_id = %(office_id_1)s::UUID AND support_plan_cycles.is_latest_cycle = *** ORDER BY welfare_recipients.last_name ASC, welfare_recipients.first_name ASC
+2026-01-25T02:09:29.3424062Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 1109s ago] ***'office_id_1': UUID('9887c99d-2fd9-4abc-9771-58026acdb1a4')***
+2026-01-25T02:09:29.3433425Z INFO     sqlalchemy.engine.Engine:base.py:1842 SELECT welfare_recipients.id, welfare_recipients.first_name, welfare_recipients.last_name, welfare_recipients.first_name_furigana, welfare_recipients.last_name_furigana, welfare_recipients.birth_day, welfare_recipients.gender, welfare_recipients.created_at, welfare_recipients.updated_at, welfare_recipients.is_test_data, support_plan_cycles.id AS id_1, support_plan_cycles.welfare_recipient_id, support_plan_cycles.office_id, support_plan_cycles.plan_cycle_start_date, support_plan_cycles.final_plan_signed_date, support_plan_cycles.next_renewal_deadline, support_plan_cycles.is_latest_cycle, support_plan_cycles.cycle_number, support_plan_cycles.next_plan_start_date, support_plan_cycles.google_calendar_id, support_plan_cycles.google_event_id, support_plan_cycles.google_event_url, support_plan_cycles.created_at AS created_at_1, support_plan_cycles.updated_at AS updated_at_1, support_plan_cycles.is_test_data AS is_test_data_1 
+2026-01-25T02:09:29.3437040Z FROM welfare_recipients JOIN support_plan_cycles ON support_plan_cycles.welfare_recipient_id = welfare_recipients.id 
+2026-01-25T02:09:29.3438805Z WHERE support_plan_cycles.office_id = %(office_id_1)s::UUID AND support_plan_cycles.is_latest_cycle = *** AND support_plan_cycles.next_renewal_deadline IS NOT NULL AND support_plan_cycles.next_renewal_deadline <= %(next_renewal_deadline_1)s::DATE ORDER BY support_plan_cycles.next_renewal_deadline ASC, welfare_recipients.last_name ASC, welfare_recipients.first_name ASC
+2026-01-25T02:09:29.3440670Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 1109s ago] ***'office_id_1': UUID('5982d010-53ff-4ffb-b237-9418ca909178'), 'next_renewal_deadline_1': datetime.date(2026, 2, 24)***
 
 
-## テスト結果
+.
+.
+.
 
-### ローカルテスト（修正後）
-```
-$ docker exec keikakun_app-backend-1 pytest tests/tasks/test_deadline_notification.py tests/tasks/test_deadline_notification_web_push.py -v
+2026-01-25T02:09:29.4340662Z FROM plan_deliverables 
+2026-01-25T02:09:29.4340920Z WHERE plan_deliverables.plan_cycle_id IN (%(primary_keys_1)s::INTEGER)
+2026-01-25T02:09:29.4341235Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 1111s ago] ***'primary_keys_1': 14481***
+2026-01-25T02:09:29.4342275Z INFO     app.tasks.deadline_notification:deadline_notification.py:162 [DEADLINE_NOTIFICATION] Office テスト事業所 (ID: e9be5a02-2f97-433c-a5ec-7b2fc825f97e): 0 renewal alerts, 1 assessment alerts (max threshold: *** days)
+2026-01-25T02:09:29.4344402Z INFO     sqlalchemy.engine.Engine:base.py:1842 SELECT staffs.id, staffs.email, staffs.hashed_password, staffs.name, staffs.last_name, staffs.first_name, staffs.last_name_furigana, staffs.first_name_furigana, staffs.full_name, staffs.role, staffs.is_email_verified, staffs.is_mfa_enabled, staffs.is_mfa_verified_by_user, staffs.mfa_secret, staffs.mfa_backup_codes_used, staffs.password_changed_at, staffs.failed_password_attempts, staffs.is_locked, staffs.locked_at, staffs.hashed_passphrase, staffs.passphrase_changed_at, staffs.is_deleted, staffs.deleted_at, staffs.deleted_by, staffs.created_at, staffs.updated_at, staffs.is_test_data, staffs.notification_preferences 
+2026-01-25T02:09:29.4344702Z FROM staffs JOIN office_staffs ON office_staffs.staff_id = staffs.id 
+2026-01-25T02:09:29.4345061Z WHERE office_staffs.office_id = %(office_id_1)s::UUID AND staffs.deleted_at IS NULL AND staffs.email IS NOT NULL
+2026-01-25T02:09:29.4345478Z INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 133.7s ago] ***'office_id_1': UUID('e9be5a02-2f97-433c-a5ec-7b2fc825f97e')***
+2026-01-25T02:09:29.4346165Z INFO     app.tasks.deadline_notification:deadline_notification.py:192 [DEADLINE_NOTIFICATION] Office テスト事業所 (ID: e9be5a02-2f97-433c-a5ec-7b2fc825f97e): Processing 2 staff members
+2026-01-25T02:09:29.4346873Z INFO     app.tasks.deadline_notification:deadline_notification.py:234 [DEADLINE_NOTIFICATION] Staff m***@example.com (テスト マネージャー): 0 renewal alerts, 1 assessment alerts (threshold: *** days)
+2026-01-25T02:09:29.4347456Z INFO     app.tasks.deadline_notification:deadline_notification.py:241 [DRY RUN] Would send email to m***@example.com (テスト マネージャー) - threshold: *** days
+2026-01-25T02:09:29.4348200Z INFO     app.tasks.deadline_notification:deadline_notification.py:234 [DEADLINE_NOTIFICATION] Staff e***@example.com (テスト エンプロイー): 0 renewal alerts, 1 assessment alerts (threshold: *** days)
+2026-01-25T02:09:29.4349017Z INFO     app.tasks.deadline_notification:deadline_notification.py:241 [DRY RUN] Would send email to e***@example.com (テスト エンプロイー) - threshold: *** days
+2026-01-25T02:09:29.4352100Z INFO     sqlalchemy.engine.Engine:base.py:1842 SELECT welfare_recipients.id, welfare_recipients.first_name, welfare_recipients.last_name, 
 
-================= 13 passed, 15 warnings in 128.69s (0:02:08) ==================
-```
-
-**全テストPASS！**
-
-## 修正のポイント
-
-### 環境別の動作
-| 環境 | TESTING | is_test_dataフィルタ | 使用DB |
-|------|---------|---------------------|---------|
-| 本番 | 未設定 | 有効（False のみ） | DATABASE_URL |
-| テスト | "1" | 無効（全て含む） | TEST_DATABASE_URL |
-| GitHub Actions | "1" | 無効（全て含む） | TEST_DATABASE_URL |
-
-### フィルタリング箇所
-1. ✅ Office取得クエリ
-2. ✅ Staff取得クエリ
-3. ✅ WelfareRecipient取得クエリ（更新期限アラート）
-4. ✅ WelfareRecipient取得クエリ（アセスメント未完了）
-5. ❌ PushSubscription - 不要（親でフィルタ済み）
-
-## 学んだこと
-
-1. **テストデータの識別は重要**
-   - is_test_dataフラグを適切に使用
-   - 本番環境では必ず除外
-
-2. **環境変数の設計**
-   - TESTING=1 で環境を明示
-   - session.pyの分岐を正しく機能させる
-
-3. **テストの隔離**
-   - 本番DBとテストDBを完全に分離
-   - conftest.pyのクリーンアップも重要
-
-4. **依存関係の理解**
-   - 子テーブルは親でフィルタされる
-   - 不要なカラム追加を避ける
-
-## コミット履歴
-
-```
-c7833ca fix: 本番環境でテストデータを除外し、テスト環境では含める
-326e5e1 fix: GitHub ActionsでTESTING=1を設定し本番DBを使用しないように修正
-```
-
-**最終更新**: 2026-01-22
-**修正完了**: ✅
-
------
-# 1/23
-
-__________________ test_send_deadline_alert_emails_no_alerts ___________________
-tests/tasks/test_deadline_notification.py:62: in test_send_deadline_alert_emails_no_alerts
-    assert result["email_sent"] == 0
-E   assert 6 == 0
----------------------------- Captured stderr setup -----------------------------
-
-___________ test_send_deadline_alert_emails_with_threshold_filtering ___________
-tests/tasks/test_deadline_notification.py:127: in test_send_deadline_alert_emails_with_threshold_filtering
-    assert result["email_sent"] == 1
-E   assert 7 == 1
----------------------------- Captured stderr setup -----------------------------
-
-_________ test_send_deadline_alert_emails_email_notification_disabled __________
-tests/tasks/test_deadline_notification.py:168: in test_send_deadline_alert_emails_email_notification_disabled
-    assert result["email_sent"] == 0
-E   assert 6 == 0
----------------------------- Captured stderr setup -----------------------------
-
-_____________ test_send_deadline_alert_emails_multiple_thresholds ______________
-tests/tasks/test_deadline_notification.py:251: in test_send_deadline_alert_emails_multiple_thresholds
-    assert result["email_sent"] == 2
-E   assert 8 == 2
----------------------------- Captured stderr setup -----------------------------
-
-______________ test_send_deadline_alert_emails_default_threshold _______________
-tests/tasks/test_deadline_notification.py:290: in test_send_deadline_alert_emails_default_threshold
-    assert result["email_sent"] == 1
-E   assert 7 == 1
----------------------------- Captured stderr setup -----------------------------
-
-_______________ test_push_sent_when_system_notification_enabled ________________
-tests/tasks/test_deadline_notification_web_push.py:83: in test_push_sent_when_system_notification_enabled
-    assert result["email_sent"] == 1, "メールが1件送信される"
-E   AssertionError: メールが1件送信される
-E   assert 7 == 1
----------------------------- Captured stderr setup -----------------------------
-
-_____________ test_push_skipped_when_system_notification_disabled ______________
-tests/tasks/test_deadline_notification_web_push.py:147: in test_push_skipped_when_system_notification_disabled
-    assert result["email_sent"] == 1, "メールは送信される"
-E   AssertionError: メールは送信される
-E   assert 7 == 1
----------------------------- Captured stderr setup -----------------------------
-
-________________________ test_push_threshold_filtering _________________________
-tests/tasks/test_deadline_notification_web_push.py:231: in test_push_threshold_filtering
-    assert result["email_sent"] == 1, "メールは1件（両方の利用者を含む）"
-E   AssertionError: メールは1件（両方の利用者を含む）
-E   assert 7 == 1
----------------------------- Captured stderr setup -----------------------------
-
-__________________________ test_push_multiple_devices __________________________
-tests/tasks/test_deadline_notification_web_push.py:311: in test_push_multiple_devices
-    assert result["email_sent"] == 1, "メールが1件送信される"
-E   AssertionError: メールが1件送信される
-E   assert 7 == 1
----------------------------- Captured stderr setup -----------------------------
-
-# 詳細結果
-## TEST_DATABASE_URL
--     TESTING: 1
-    DATABASE_URL: ***
-    TEST_DATABASE_URL: ***
-
-## 関係ありそうなログ一部
-INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 1498s ago] ***'office_id_1': UUID('7e4fa466-b5c9-448f-9f97-e849a979dad8')***
-INFO     sqlalchemy.engine.Engine:base.py:1842 SELECT plan_deliverables.plan_cycle_id AS plan_deliverables_plan_cycle_id, plan_deliverables.id AS plan_deliverables_id, plan_deliverables.deliverable_type AS plan_deliverables_deliverable_type, plan_deliverables.file_path AS plan_deliverables_file_path, plan_deliverables.original_filename AS plan_deliverables_original_filename, plan_deliverables.uploaded_by AS plan_deliverables_uploaded_by, plan_deliverables.uploaded_at AS plan_deliverables_uploaded_at, plan_deliverables.is_test_data AS plan_deliverables_is_test_data 
-FROM plan_deliverables 
-WHERE plan_deliverables.plan_cycle_id IN (%(primary_keys_1)s::INTEGER)
-INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 1498s ago] ***'primary_keys_1': 12908***
-INFO     app.services.welfare_recipient_service:welfare_recipient_service.py:771 [DEADLINE_ALERTS_DEBUG] Found 1 candidates for assessment alerts
-INFO     app.services.welfare_recipient_service:welfare_recipient_service.py:775 [DEADLINE_ALERTS_DEBUG] Checking: テスト1 太郎, cycle_number=1, is_latest=True
-INFO     app.services.welfare_recipient_service:welfare_recipient_service.py:784 [DEADLINE_ALERTS_DEBUG]   - テスト1 太郎 has NO deliverables
-INFO     app.services.welfare_recipient_service:welfare_recipient_service.py:787 [DEADLINE_ALERTS_DEBUG]   ✅ Adding テスト1 太郎 to assessment incomplete alerts
-INFO     app.tasks.deadline_notification:deadline_notification.py:162 [DEADLINE_NOTIFICATION] Office テスト事業所1 (ID: 7e4fa466-b5c9-448f-9f97-e849a979dad8): 1 renewal alerts, 1 assessment alerts (max threshold: *** days)
-INFO     sqlalchemy.engine.Engine:base.py:1842 SELECT staffs.id, staffs.email, staffs.hashed_password, staffs.name, staffs.last_name, staffs.first_name, staffs.last_name_furigana, staffs.first_name_furigana, staffs.full_name, staffs.role, staffs.is_email_verified, staffs.is_mfa_enabled, staffs.is_mfa_verified_by_user, staffs.mfa_secret, staffs.mfa_backup_codes_used, staffs.password_changed_at, staffs.failed_password_attempts, staffs.is_locked, staffs.locked_at, staffs.hashed_passphrase, staffs.passphrase_changed_at, staffs.is_deleted, staffs.deleted_at, staffs.deleted_by, staffs.created_at, staffs.updated_at, staffs.is_test_data, staffs.notification_preferences 
-FROM staffs JOIN office_staffs ON office_staffs.staff_id = staffs.id 
-WHERE office_staffs.office_id = %(office_id_1)s::UUID AND staffs.deleted_at IS NULL AND staffs.email IS NOT NULL
-INFO     sqlalchemy.engine.Engine:base.py:1842 [cached since 6.061s ago] ***'office_id_1': UUID('7e4fa466-b5c9-448f-9f97-e849a979dad8')***
-INFO     app.tasks.deadline_notification:deadline_notification.py:192 [DEADLINE_NOTIFICATION] Office テスト事業所1 (ID: 7e4fa466-b5c9-448f-9f97-e849a979dad8): Processing 1 staff members
-INFO     app.tasks.deadline_notification:deadline_notification.py:234 [DEADLINE_NOTIFICATION] Staff a***@example.com (テスト 管理者): 1 renewal alerts, 1 assessment alerts (threshold: *** days)
-INFO     app.tasks.deadline_notification:deadline_notification.py:241 [DRY RUN] Would send email to a***@example.com (テスト 管理者) - threshold: *** days
-INFO     app.tasks.deadline_notification:deadline_notification.py:429 [DEADLINE_NOTIFICATION] Completed: Would send 7 emails, 0 push notifications (0 failed)
-
-## Error
-2026-01-22 12:54:04 [ WARNING] app.tasks.deadline_notification - Retrying app.tasks.deadline_notification._send_email_with_retry in 2.0 seconds as it raised Exception: Permanent SMTP failure.
-2026-01-22 12:54:06 [ WARNING] app.tasks.deadline_notification - Retrying app.tasks.deadline_notification._send_email_with_retry in 2.0 seconds as it raised Exception: Permanent SMTP failure.
-2026-01-22 12:54:08 [   ERROR] app.tasks.deadline_notification - [DEADLINE_NOTIFICATION] Failed to send email to t***@example.com: Permanent SMTP failure
-Traceback (most recent call last):
-  File "/home/runner/work/keikakun_app/keikakun_app/k_back/app/tasks/deadline_notification.py", line 249, in send_deadline_alert_emails
-    await asyncio.wait_for(
-  File "/opt/hostedtoolcache/Python/3.12.12/x64/lib/python3.12/asyncio/tasks.py", line 520, in wait_for
-    return await fut
-           ^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.12.12/x64/lib/python3.12/site-packages/tenacity/asyncio/__init__.py", line 189, in async_wrapped
-    return await copy(fn, *args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.12.12/x64/lib/python3.12/site-packages/tenacity/asyncio/__init__.py", line 111, in __call__
-    do = await self.iter(retry_state=retry_state)
-         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.12.12/x64/lib/python3.12/site-packages/tenacity/asyncio/__init__.py", line 153, in iter
-    result = await action(retry_state)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.12.12/x64/lib/python3.12/site-packages/tenacity/_utils.py", line 99, in inner
-    return call(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.12.12/x64/lib/python3.12/site-packages/tenacity/__init__.py", line 420, in exc_check
-    raise retry_exc.reraise()
-          ^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.12.12/x64/lib/python3.12/site-packages/tenacity/__init__.py", line 187, in reraise
-    raise self.last_attempt.result()
-          ^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.12.12/x64/lib/python3.12/concurrent/futures/_base.py", line 449, in result
-    return self.__get_result()
-           ^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.12.12/x64/lib/python3.12/concurrent/futures/_base.py", line 401, in __get_result
-    raise self._exception
-  File "/opt/hostedtoolcache/Python/3.12.12/x64/lib/python3.12/site-packages/tenacity/asyncio/__init__.py", line 114, in __call__
-    result = await fn(*args, **kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/keikakun_app/keikakun_app/k_back/app/tasks/deadline_notification.py", line 61, in _send_email_with_retry
-    await send_deadline_alert_email(
-  File "/opt/hostedtoolcache/Python/3.12.12/x64/lib/python3.12/unittest/mock.py", line 2***2, in _execute_mock_call
-    result = await effect(*args, **kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/keikakun_app/keikakun_app/k_back/tests/tasks/test_deadline_notification_retry.py", line 144, in always_fail
-    raise Exception("Permanent SMTP failure")
-Exception: Permanent SMTP failure
-
-    
+.
+.
+.
+これ以降も続く
