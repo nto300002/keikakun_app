@@ -15,6 +15,7 @@
 | **[implementation_plan.md](./implementation_plan.md)** | TDD実装手順（段階的な実装計画） | 開発者 |
 | **[test_specifications.md](./test_specifications.md)** | テスト仕様書（全テストケース） | 開発者、QA |
 | **[memory_optimization_strategy.md](./memory_optimization_strategy.md)** | office_idsパターンとO(N)→O(1)削減の詳細 | 開発者 |
+| **[PULL_REQUEST_TEMPLATE.md](./PULL_REQUEST_TEMPLATE.md)** | プロジェクト全体の包括的説明（PR用） | 全員 |
 | **README.md** | 本ファイル（概要とクイックスタート） | 全員 |
 
 ---
