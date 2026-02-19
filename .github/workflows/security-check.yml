@@ -14,7 +14,9 @@ jobs:
     name: OSV-Scanner (Frontend)
     uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.3.1
     with:
-      scan-args: --lockfile=k_front/package-lock.json
+      scan-args: |-
+        --config=osv-scanner.toml
+        --lockfile=k_front/package-lock.json
       checkout-submodules: true
     permissions:
       actions: read

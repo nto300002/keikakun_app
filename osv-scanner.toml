@@ -1,0 +1,15 @@
+[[IgnoredVulns]]
+id = "GHSA-2g4f-4pwh-qvx6"
+reason = """
+ajv@6.x は eslint@9.x の内部ルールスキーマ検証に使用されています。
+この ReDoS 脆弱性は `$data` オプション経由でのみトリガーされますが、
+eslint はこのオプションを使用していません（eslint/lib/shared/ajv.js 参照）。
+
+- 影響範囲: 開発時のみ（devDependency）
+- 実用的リスク: 低（$data オプション未使用）
+- 修正方針: eslint が ajv v8 に移行次第、対応予定
+- 参考: https://github.com/eslint/eslint/issues/
+
+eslint v10 への升级は eslint-config-next@16 との互換性問題（context.getFilename() API 廃止）により
+現時点では実施できません。
+"""
