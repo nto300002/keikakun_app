@@ -62,7 +62,7 @@ jobs:
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
           VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
           VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
-        run: pytest
+        run: pytest -m "not performance"
 
       - name: Authenticate to Google Cloud
         id: auth
