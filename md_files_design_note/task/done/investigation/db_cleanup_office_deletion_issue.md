@@ -1,4 +1,8 @@
-# テストDB クリーンアップ時の事務所データ削除問題 - 調査レポート
+docker-compose exec \
+   -e RUN_S3_INTEGRATION_TESTS=true \
+   -e PYTHONPATH=/app \
+   -e SECRET_KEY="test_secret_key_for_pytest" \
+   backend python tests/scripts/cleanup_duplicate_subscriptions.py --delete-all# テストDB クリーンアップ時の事務所データ削除問題 - 調査レポート
 
 **調査日**: 2025-11-19
 **対象テスト**: `tests/api/v1/test_auth_session_persistence.py`

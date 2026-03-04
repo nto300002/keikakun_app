@@ -360,7 +360,7 @@ results = await asyncio.gather(*tasks, return_exceptions=True)
 for i, result in enumerate(results):
     if isinstance(result, Exception):
         logger.error(
-            f"Office {offices[i].name} processing failed: {result}",
+            f"Office {offices[i].name} processing failed: {res  ult}",
             exc_info=True
         )
         continue

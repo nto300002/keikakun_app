@@ -159,10 +159,6 @@ DROP TABLE IF EXISTS approval_requests;
 
 COMMIT;
 
-
-
-
-
 -- ===========================================
 -- Part 2: 旧監査ログテーブル復元
 -- ===========================================
@@ -282,10 +278,6 @@ DROP TABLE IF EXISTS audit_logs;
 
 COMMIT;
 
-
-
-
-
 -- ===========================================
 -- Part 3: officesテーブル・enum復元
 -- ===========================================
@@ -325,10 +317,5 @@ CREATE TYPE staffrole AS ENUM ('employee', 'manager', 'owner');
 -- 4. カラムを新しいenum型に戻す
 ALTER TABLE staffs ALTER COLUMN role TYPE staffrole USING role::staffrole;
 */
-
--- ===========================================
--- Alembicバージョン更新
--- ===========================================
-UPDATE alembic_version SET version_num = 'c1d2e3f4g5h6' WHERE version_num = 'd2e3f4g5h6i7';
 
 COMMIT;
