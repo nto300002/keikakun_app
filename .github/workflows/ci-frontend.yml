@@ -5,11 +5,13 @@ on:
     branches: [main, develop]
     paths:
       - 'k_front/**'
+      - 'k_back/**'
       - '.github/workflows/ci-frontend.yml'
   pull_request:
     branches: [main, develop]
     paths:
       - 'k_front/**'
+      - 'k_back/**'
       - '.github/workflows/ci-frontend.yml'
 
 jobs:
@@ -44,7 +46,6 @@ jobs:
         working-directory: k_front
         run: npm run build
         env:
-          # ビルド時に必要な環境変数があれば追加
           NODE_ENV: production
 
       - name: Cache build output
@@ -78,3 +79,163 @@ jobs:
       - name: Run ESLint
         working-directory: k_front
         run: npm run lint
+
+  e2e-tests:
+    name: E2E Tests (Playwright)
+    runs-on: ubuntu-latest
+    # lint/build が通ってから E2E を実行する
+    needs: [build-and-test, lint-and-format]
+    timeout-minutes: 30
+    # バックエンドで共通して使用する環境変数をジョブレベルで定義
+    # (#23) 各ステップへの重複記述を防ぐ
+    env:
+      DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
+      SECRET_KEY: ${{ secrets.E2E_SECRET_KEY }}
+      FRONTEND_URL: http://localhost:3000
+      ENVIRONMENT: test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ─── Backend ────────────────────────────────────────────────────────────
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: k_back/requirements.txt
+
+      - name: Install backend dependencies
+        working-directory: k_back
+        run: pip install -r requirements.txt
+
+      - name: Run DB migrations
+        working-directory: k_back
+        run: alembic upgrade head
+
+      - name: Ensure E2E owner account exists
+        # 冪等: owner がすでに存在する場合はスキップして終了する
+        # (#3) シークレットを CLI 引数でなく環境変数経由で渡す（プロセスリストへの漏洩防止）
+        working-directory: k_back
+        run: python scripts/create_e2e_owner.py
+        env:
+          E2E_OWNER_EMAIL: ${{ secrets.E2E_OWNER_EMAIL }}
+          E2E_OWNER_PASSWORD: ${{ secrets.E2E_OWNER_PASSWORD }}
+
+      - name: Start backend server
+        # (#4/#24) ログをファイルに記録し、PID を環境変数に保持してデバッグを容易にする
+        working-directory: k_back
+        run: |
+          uvicorn app.main:app --host 0.0.0.0 --port 8000 \
+            > /tmp/backend.log 2>&1 &
+          echo "BACKEND_PID=$!" >> "$GITHUB_ENV"
+
+      - name: Wait for backend to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/ > /dev/null; then
+              echo "Backend is ready (PID=$BACKEND_PID)"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "Backend failed to start. Last log lines:"
+              tail -30 /tmp/backend.log
+              exit 1
+            fi
+            echo "Waiting for backend... ($i/30)"
+            sleep 2
+          done
+
+      # ─── Frontend ────────────────────────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: k_front/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: k_front
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: k_front
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8000
+          # E2E テストでは Stripe・Push は使用しないためプレースホルダーで可
+          NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.E2E_STRIPE_PUBLISHABLE_KEY }}
+          NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${{ secrets.E2E_VAPID_PUBLIC_KEY }}
+
+      - name: Start frontend server
+        # (#4/#24) ログをファイルに記録し、PID を環境変数に保持してデバッグを容易にする
+        working-directory: k_front
+        run: |
+          npm start > /tmp/frontend.log 2>&1 &
+          echo "FRONTEND_PID=$!" >> "$GITHUB_ENV"
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8000
+
+      - name: Wait for frontend to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000 > /dev/null; then
+              echo "Frontend is ready (PID=$FRONTEND_PID)"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "Frontend failed to start. Last log lines:"
+              tail -30 /tmp/frontend.log
+              exit 1
+            fi
+            echo "Waiting for frontend... ($i/30)"
+            sleep 2
+          done
+
+      # ─── Playwright ──────────────────────────────────────────────────────────
+      - name: Install Playwright browsers
+        working-directory: k_front
+        # chromium のみインストール（playwright.config.ts の projects に合わせる）
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        working-directory: k_front
+        run: npm run test:e2e
+        env:
+          CI: "true"
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+          NEXT_PUBLIC_API_URL: http://localhost:8000
+          E2E_OWNER_EMAIL: ${{ secrets.E2E_OWNER_EMAIL }}
+          E2E_OWNER_PASSWORD: ${{ secrets.E2E_OWNER_PASSWORD }}
+          E2E_STAFF_PASSWORD: ${{ secrets.E2E_STAFF_PASSWORD }}
+
+      # ─── Artifacts ───────────────────────────────────────────────────────────
+      - name: Upload Playwright HTML report
+        # 成功・失敗問わずレポートをアップロード（結果の可視化のため）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_id }}
+          path: k_front/playwright-report/
+          retention-days: 14
+
+      - name: Upload server logs on failure
+        # (#4) 失敗時にバックエンド・フロントエンドのログをアップロード
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-logs-${{ github.run_id }}
+          path: |
+            /tmp/backend.log
+            /tmp/frontend.log
+          retention-days: 7
+
+      - name: Upload test results on failure
+        # 失敗時のみスクリーンショット・動画・トレースをアップロード
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results-${{ github.run_id }}
+          path: k_front/test-results/
+          retention-days: 7
