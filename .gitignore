@@ -6,6 +6,7 @@ memo.md
 node_modules
 .gemini
 .claude
+.codex
 __pycache__
 key.json
 setting
