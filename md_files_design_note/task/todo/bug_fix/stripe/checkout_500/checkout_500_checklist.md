@@ -334,3 +334,223 @@ WHERE billing_status = 'free'
 - `early_payment → active` のバッチ更新。
 
 特に `free → past_due` は Stripe Webhook ではなくアプリ側バッチでしか起きないため、Stripe の本番設定確認だけでは検証できない。
+
+## システム側の修正チェックリスト
+
+現行実装と照合した結果、Checkout 500 を直接防ぐ修正と、同じ DB 不整合を再発させない修正を分けて進める。
+
+### 優先度 1: Checkout 500 の直接対策
+
+- [x] `BillingService.create_checkout_session_with_customer()` で `subscription_data` を一度変数化する。
+- [x] `trial_end_date` が現在日時より未来の場合だけ `subscription_data['trial_end']` を設定する。
+- [x] `trial_end_date` が過去または `None` の場合は、Stripe Checkout Session 作成時に `trial_end` を渡さない。
+- [x] 既存 Customer ルートと Customer 新規作成ルートで `trial_end` の扱いを揃える。
+- [ ] Stripe API エラー時のログに、少なくとも `billing_id`、`office_id`、`stripe_customer_id` の有無、`trial_end_date`、`billing_status` が追える情報を残す。ただし Stripe key や個人情報は出さない。
+
+メリット:
+
+- 期限切れ trial の `trial_end` 不正による Stripe API エラーを直接防げる。
+- 影響範囲が `BillingService` 中心で小さい。
+- 既存 Customer ルートとの仕様差分を解消できる。
+
+デメリット:
+
+- `billing_status=free` のまま期限切れになる DB 不整合自体は残る。
+- Checkout は通っても、UI や権限制御が `free` と `past_due` の差分に依存している箇所では不整合が残る可能性がある。
+
+### 優先度 2: Checkout 前の DB 状態補正
+
+- [x] `create_checkout_session()` の Billing 取得後、`billing_status=free` かつ `trial_end_date < now` を検知する。
+- [x] 上記の場合は Checkout Session 作成前に `billing_status` を `past_due` に補正する。
+- [x] 補正時は `crud.billing.update_status(..., auto_commit=False)` など、Checkout 作成処理のトランザクション方針と衝突しない形にする。
+- [x] 補正した事実をログに残す。
+- [ ] `early_payment` の期限切れを Checkout API 内で `active` に補正するかは別判断にする。Checkout 500 の直接原因ではないため、まずは `free -> past_due` に限定する。
+
+メリット:
+
+- バッチが動いていない場合でも、ユーザー操作時に期限切れ `free` を自己修復できる。
+- `past_due` 前提の表示・課金導線・権限制御に状態を寄せられる。
+
+デメリット:
+
+- Checkout API に状態補正責務が増える。
+- これだけでは過去 `trial_end` を Stripe に渡す問題は防げないため、優先度 1 の修正とセットで考える。
+
+### 優先度 3: Billing Scheduler 起動修正
+
+- [ ] `main.py` で `billing_scheduler` インスタンスではなく、`app.scheduler.billing_scheduler` モジュールの独自 `start()` / `shutdown()` を呼ぶ形に修正する。
+- [ ] 起動時に `check_trial_expiration` と `check_scheduled_cancellation` の 2 ジョブが登録されることを確認する。
+- [ ] shutdown も独自 `shutdown()` を呼び、未起動時やテスト環境で例外にならないことを確認する。
+- [ ] 二重起動時にジョブ重複や `SchedulerAlreadyRunningError` が起きないようにする。
+
+メリット:
+
+- 本来の `free -> past_due`、`early_payment -> active`、`canceling -> canceled` が定期的に実行される。
+- 期限切れ trial が `free` のまま残る根本原因を減らせる。
+
+デメリット:
+
+- Cloud Run が scale-to-zero する構成では、指定時刻にインスタンスが起動していないと実行されない。
+- 複数インスタンス構成では同じジョブが重複実行される可能性がある。
+- Checkout 500 の直接対策にはならないため、優先度 1 の修正が先。
+
+### 優先度 4: 本番バッチ運用の見直し
+
+- [ ] Cloud Run の常駐 APScheduler に依存し続けるか、Cloud Scheduler / Cloud Run Jobs に移すかを決める。
+- [ ] Cloud Scheduler / Cloud Run Jobs に移す場合、課金バッチ用の安全な実行入口を用意する。
+- [ ] バッチ実行の認証、リトライ、失敗通知、実行ログ、冪等性を確認する。
+- [ ] `check_trial_expiration` と `check_scheduled_cancellation` を外部バッチから呼べる形に整理する。
+
+メリット:
+
+- scale-to-zero 前提でも課金状態更新を確実に実行しやすい。
+- アプリサーバーのライフサイクルと定期バッチを分離できる。
+
+デメリット:
+
+- インフラ設定と運用設計が必要で、即時復旧には向かない。
+- バッチ実行入口の認証や誤実行防止を設計する必要がある。
+
+## 追加テスト実装チェックリスト
+
+既存テストの確認結果:
+
+- `k_back/tests/tasks/test_billing_check.py` には `check_trial_expiration()` の `free -> past_due`、`early_payment -> active`、対象外ステータスの単体テストがある。
+- `k_back/tests/api/test_billing.py` には Checkout Session 作成時に metadata と未来の `trial_end` が含まれるテストがある。
+- `k_back/tests/services/test_billing_service.py` には `create_checkout_session_with_customer()` の成功、Stripe エラー時 rollback、MissingGreenlet 回避のテストがある。
+- ただし、`billing_status=free`、`trial_end_date < now`、`stripe_customer_id IS NULL` の Checkout 作成テストは不足している。
+- Scheduler について、`main.py` startup から billing の独自 `start()` が呼ばれ、ジョブが登録されることを検証するテストは不足している。
+
+### BillingService のテスト
+
+- [x] `create_checkout_session_with_customer()` に未来の `trial_end_date` を渡した場合、`subscription_data.trial_end` が Stripe に渡されることを確認する。
+- [x] `create_checkout_session_with_customer()` に過去の `trial_end_date` を渡した場合、`subscription_data.trial_end` が Stripe に渡されないことを確認する。
+- [x] 過去の `trial_end_date` でも Checkout Session 作成自体は成功し、`session_id` と `url` が返ることを確認する。
+- [ ] `trial_end_date=None` を許容する設計にする場合、`trial_end` を渡さず成功することを確認する。現行 model は nullable=False なので、仕様変更しないなら不要。
+- [x] Stripe Checkout Session 作成が失敗した場合、作成済み Customer ID が DB に commit されず rollback されることを維持確認する。
+
+### Checkout API のテスト
+
+- [x] `billing_status=free`、`trial_end_date < now`、`stripe_customer_id IS NULL` の事業所で `POST /api/v1/billing/create-checkout-session` が 200 になることを確認する。
+- [x] 上記ケースで Stripe に渡す `subscription_data` に `trial_end` が含まれないことを確認する。
+- [x] 上記ケースで Checkout 作成前または作成成功後に `billing_status` が `past_due` に補正されることを確認する。
+- [x] `billing_status=free`、`trial_end_date > now` の事業所では従来どおり `trial_end` が渡されることを確認する。
+- [x] `stripe_customer_id` が既に存在する期限切れ事業所でも `trial_end` が渡されず、Checkout Session 作成が 200 になることを確認する。
+- [x] `stripe_customer_id` が既に存在する trial 中事業所では `trial_end` が渡されることを確認する。
+- [x] `billing_status=past_due`、`trial_end_date < now` の事業所で Checkout Session 作成が 200 になり、`trial_end` が渡されないことを確認する。
+
+### Scheduler のテスト
+
+- [ ] `billing_scheduler.start()` を呼ぶと `check_trial_expiration` ジョブが登録されることを確認する。
+- [ ] `billing_scheduler.start()` を呼ぶと `check_scheduled_cancellation` ジョブが登録されることを確認する。
+- [ ] `main.py` の startup が billing scheduler モジュールの独自 `start()` を呼ぶことを mock で確認する。
+- [ ] `main.py` の shutdown が billing scheduler モジュールの独自 `shutdown()` を呼ぶことを mock で確認する。
+- [ ] `TESTING=1` の場合は scheduler が起動されないことを維持確認する。
+- [ ] 二重起動時にジョブが重複登録されない、または例外なく扱えることを確認する。
+
+### バッチ状態遷移の回帰テスト
+
+- [ ] `check_trial_expiration()` で `free -> past_due` が維持されることを確認する。
+- [ ] `check_trial_expiration()` で `early_payment -> active` が維持されることを確認する。
+- [ ] `past_due`、`active`、`canceling`、`canceled` は trial 期限切れチェックで誤更新されないことを確認する。
+- [ ] `check_scheduled_cancellation()` で `canceling -> canceled` が維持されることを確認する。
+- [ ] dry-run では対象件数だけ返し、DB 更新しないことを確認する。
+
+### エラーを未然に防ぐための重点観点
+
+- [x] Stripe に過去日時の `trial_end` を送らないこと。
+- [x] Customer 新規作成ルートと既存 Customer ルートで Checkout Session パラメータ差分が出ないこと。
+- [x] バッチ未実行で `free` のまま期限切れになっても Checkout 導線が 500 にならないこと。
+- [x] Checkout 成功後に DB の `stripe_customer_id` が保存されること。
+- [x] Checkout 失敗時に中途半端な `stripe_customer_id` が保存されないこと。
+- [ ] 本番運用では scheduler が「起動している」だけでなく「ジョブ登録済み」であることをログまたはテストで確認できること。
+
+## TDD Red フェーズ: テスト要件
+
+今回の修正は、まず以下の失敗テストを追加してから実装する。
+
+### 1. 新規 Customer 作成ルートで過去の `trial_end` を Stripe に渡さない
+
+対象候補:
+
+- `k_back/tests/services/test_billing_service.py`
+
+テスト要件:
+
+- Given: `stripe_customer_id IS NULL` 相当の新規 Customer 作成ルートを使う。
+- Given: `trial_end_date` が現在日時より過去。
+- When: `BillingService.create_checkout_session_with_customer()` を実行する。
+- Then: `stripe.checkout.Session.create(...)` の `subscription_data` に `trial_end` が含まれない。
+- Then: Checkout Session 作成は成功し、戻り値に `session_id` と `url` が含まれる。
+- Then: Customer 作成後に `billing.stripe_customer_id` が保存される。
+- Then: Stripe API 例外が発生しない限り 500 に変換されない。
+
+既存 Customer ルートには未来日の場合のみ `trial_end` を渡す実装があるため、新規 Customer ルートも同じ互換的な条件にそろえる。
+
+### 2. 新規 Customer 作成ルートで未来の `trial_end` は従来どおり Stripe に渡す
+
+対象候補:
+
+- `k_back/tests/services/test_billing_service.py`
+
+テスト要件:
+
+- Given: `stripe_customer_id IS NULL` 相当の新規 Customer 作成ルートを使う。
+- Given: `trial_end_date` が現在日時より未来。
+- When: `BillingService.create_checkout_session_with_customer()` を実行する。
+- Then: `stripe.checkout.Session.create(...)` の `subscription_data.trial_end` が `int(trial_end_date.timestamp())` と一致する。
+- Then: 既存の無料トライアル付き Checkout の挙動を壊さない。
+
+### 3. Checkout 作成前に期限切れ `free` billing を `past_due` へ補正する
+
+対象候補:
+
+- `k_back/tests/api/test_billing.py`
+- または `k_back/tests/services/test_billing_service.py`
+
+テスト要件:
+
+- Given: `billing_status = free`
+- Given: `trial_end_date < now`
+- Given: `stripe_customer_id IS NULL`
+- When: Checkout Session 作成処理を呼ぶ。
+- Then: Checkout 作成前、または同一処理内で `billing_status` が `past_due` に補正される。
+- Then: 過去の `trial_end` は Stripe に渡されない。
+- Then: レスポンスは 500 ではなく Checkout URL を返す。
+
+このテストは、バッチ未実行で期限切れ `free` が残っている本番 DB 状態を再現する。
+
+### 4. billing scheduler startup で課金ジョブが登録される
+
+対象候補:
+
+- `k_back/tests/scheduler/test_billing_scheduler.py`
+- または `k_back/tests/test_main_scheduler_startup.py`
+
+テスト要件:
+
+- Given: テスト用に `TESTING != "1"` 相当の条件で startup 処理を呼ぶ、または billing scheduler の `start()` wrapper を直接検証する。
+- When: billing scheduler の起動処理を実行する。
+- Then: `check_trial_expiration` ジョブが登録される。
+- Then: `check_scheduled_cancellation` ジョブが登録される。
+- Then: `AsyncIOScheduler.start()` だけを直接呼んでジョブ未登録のまま開始する経路にならない。
+- Then: すでに起動済みの場合でも二重登録で例外にならない、または `replace_existing=True` により同一 ID のジョブとして維持される。
+
+### 5. scheduler shutdown は未起動状態でも安全に扱う
+
+対象候補:
+
+- `k_back/tests/scheduler/test_billing_scheduler.py`
+
+テスト要件:
+
+- Given: billing scheduler が未起動、または startup がスキップされた状態。
+- When: shutdown 処理を呼ぶ。
+- Then: `SchedulerNotRunningError` などでアプリ終了処理が失敗しない。
+
+### Red フェーズ完了条件
+
+- 上記のうち、今回の 500 再現に直結する 1、2、3 を先に追加する。
+- scheduler 起動問題を同時修正する場合は 4、5 も追加する。
+- テスト追加直後は、少なくとも 1 または 3 が現行実装で失敗することを確認する。
+- 失敗確認後に Green フェーズとして最小実装を行う。
