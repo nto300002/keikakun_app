@@ -181,6 +181,204 @@ loading画面において、5秒以上かかる時には更新を促す
 - 初期表示ではcountを省略し、必要時だけ取得する案を検討する。
 - サマリー集計用の軽量APIを別に切る。
 
+## 追加調査で見つかったボトルネック候補
+
+調査日: 2026-06-30
+
+既存の「期限アラート」「通知未読件数」「Dashboard集計」以外で、現行実装から見た候補を整理する。
+
+### 追加候補チェックリスト
+
+- [x] MFA/ログイン処理の成功パス詳細ログを削減する。
+- [x] 通知の保持上限削除を全件取得 + 1件ずつdeleteからDB側一括削除へ変更する。
+- [ ] PDF一覧APIの署名付きURL生成タイミングと件数取得を見直す。
+- [ ] Dashboard検索の `ILIKE '%word%'` / `concat()` 依存を見直す。
+- [ ] Google Calendar同期/削除系の外部API逐次処理をバックグラウンド化する。
+- [ ] 開発/本番に残る `console.log` / debugログの出力方針を整理する。
+- [ ] CSRF初期化APIをログイン直後の必須APIから外せるか検討する。
+
+今回のbackend実装では、破壊的変更を避けるため、通知保持上限削除の一括化とMFA/ログイン成功パスログの抑制を先行する。PDF一覧、Dashboard検索、Google Calendar同期、CSRF初期化は仕様・UX・外部API影響が大きいため、別タスクで計測後に扱う。
+
+### 4. MFA/ログイン処理のログ出力が多い
+
+該当箇所:
+
+- `k_back/app/api/v1/endpoints/auths.py`
+- `k_back/app/services/mfa.py`
+- `k_back/app/models/staff.py`
+
+内容:
+
+- MFA検証時に temporary token 長、TOTPコード、復号成否、secret長などを複数回 `logger.info()` で出している。
+- `Staff.get_mfa_secret()` でも復号のたびに info ログを出している。
+- ログイン時のCookie設定でも環境変数・Cookie option系の info ログが毎回出る。
+
+影響:
+
+- MFA/ログインのリクエストごとにログI/Oが増える。
+- 本番ログ基盤やDocker logの出力量が増え、遅延調査時にノイズになる。
+- TOTPコードやメールアドレスに近い情報がログに出ており、性能だけでなく運用・セキュリティ面でもリスクがある。
+
+改善案:
+
+- 通常成功パスの詳細ログは `debug` に下げる。
+- TOTPコード、secret長、メールアドレスなどはログから除外する。
+- MFA失敗・復号失敗など調査に必要なイベントのみ `warning` / `error` で残す。
+
+### 5. 通知の保持上限削除が全件取得 + 1件ずつdelete
+
+該当箇所:
+
+- `k_back/app/crud/crud_notice.py`
+- `CRUDNotice.delete_old_notices_over_limit()`
+- 呼び出し元: `role_change_service.py` / `employee_action_service.py`
+
+内容:
+
+- 事務所の通知を全件取得して `notices[limit:]` をPython側で切り出している。
+- 削除対象を1件ずつ `db.delete()` している。
+- 承認通知・社員アクション通知の作成時に呼ばれるため、通知が多い事務所ほど通知作成が重くなる。
+
+影響:
+
+- 通知件数が増えると、通知作成や承認/却下処理のレスポンスが悪化する。
+- ログイン直後の通知取得だけでなく、通知を作る操作にも負荷が偏る。
+
+改善案:
+
+- 削除対象IDだけを `OFFSET limit` 以降で取得し、`DELETE ... WHERE id IN (...)` にする。
+- 可能なら `created_at` と `id` で安定ソートし、DB側で一括削除する。
+- `notices(office_id, created_at DESC)` インデックスを使える形にする。
+
+### 6. PDF一覧APIで一覧取得 + 件数取得 + 署名付きURL生成を同期的に実行
+
+該当箇所:
+
+- `k_front/app/(protected)/pdf-list/page.tsx`
+- `k_back/app/services/support_plan_service.py`
+- `k_back/app/crud/crud_support_plan.py`
+
+内容:
+
+- フロント側でPDF一覧表示前に `authApi.getCurrentUser()` を追加実行している。
+- バックエンドでは一覧取得と総件数取得を別クエリで実行している。
+- 取得した各PDFに対してS3署名付きURLを1件ずつ生成している。
+
+影響:
+
+- PDFが多い事務所では、一覧表示時のDB負荷とS3署名URL生成コストが積み上がる。
+- `pdf-list` へ遷移した時に、認証情報取得とPDF一覧取得が直列になり体感待ち時間が伸びる。
+
+改善案:
+
+- `currentUser.office.id` は保護レイアウトや認証コンテキストから渡せないか確認する。
+- 初期一覧では署名付きURLを返さず、ユーザーが開く/ダウンロードするタイミングで発行する案を検討する。
+- 総件数が不要な画面では `limit + 1` で `has_more` 判定に切り替える。
+- PDF一覧向けに `plan_deliverables(uploaded_at DESC)`、`plan_deliverables(deliverable_type, uploaded_at DESC)`、`support_plan_cycles(office_id, id)` の必要性をEXPLAINで確認する。
+
+### 7. Dashboard検索が部分一致 `ILIKE '%word%'` と `concat()` に依存
+
+該当箇所:
+
+- `k_back/app/crud/crud_dashboard.py`
+- `CRUDDashboard.get_filtered_summaries()`
+- `CRUDDashboard.count_filtered_summaries()`
+
+内容:
+
+- 氏名/ふりがな検索で `ILIKE '%word%'` を複数カラムに対して実行している。
+- ソートでも `concat(last_name_furigana, first_name_furigana)` を使う。
+- 通常のB-treeインデックスだけでは部分一致検索や式ソートに効きづらい。
+
+影響:
+
+- 利用者数が増えた事務所で検索・絞り込みが遅くなりやすい。
+- 検索時も一覧クエリとcountクエリの両方で同じ条件が走るため、負荷が二重になる。
+
+改善案:
+
+- 検索要件が前方一致でよいなら `word%` に寄せる。
+- 部分一致を維持するなら PostgreSQL の `pg_trgm` + GIN index を検討する。
+- `full_name_furigana` のような検索/ソート用正規化カラム、または式インデックスを検討する。
+- 検索中は `filtered_count` を省略する、または遅延取得する。
+
+### 8. Google Calendar同期/削除系が外部APIを逐次処理している
+
+該当箇所:
+
+- `k_back/app/services/calendar_service.py`
+- `CalendarService.sync_pending_events()`
+- `CalendarService.delete_event_by_cycle()`
+- `CalendarService.delete_event_by_status()`
+
+内容:
+
+- 未同期イベントを取得後、事務所ごと・イベントごとにGoogle Calendar APIを逐次呼び出している。
+- 事務所ごとにサービスアカウントキー復号、クライアント作成、認証を行う。
+- 削除系でも対象イベントに対して外部API呼び出しが同期的に走る。
+
+影響:
+
+- Google Calendar連携を使っている事務所では、支援計画更新や削除操作が外部API遅延の影響を受ける。
+- Google Calendarを使わない事務所も多い前提では、同期処理が通常操作の体感速度を悪化させない設計が必要。
+
+改善案:
+
+- ユーザー操作の同期レスポンスから外部API呼び出しを切り離し、バックグラウンドジョブ化する。
+- 事務所ごとのCalendar設定が未接続なら早期returnし、イベント取得や復号処理を避ける。
+- 同期対象数に上限を設け、失敗時は指数バックオフや次回再試行に回す。
+
+### 9. 開発/本番に残る `console.log` / debugログが多い
+
+該当箇所:
+
+- `k_front/lib/support-plan.ts`
+- `k_front/lib/pdf-deliverables.ts`
+- `k_front/app/(protected)/pdf-list/page.tsx`
+- `k_front/components/auth/LoginForm.tsx`
+- `k_back/app/services/welfare_recipient_service.py`
+- `k_back/app/services/dashboard_service.py`
+
+内容:
+
+- フロントのPDF/支援計画/ログイン周辺に詳細な `console.log` が残っている。
+- バックエンドにも deadline/dashboard 周辺の debugログが多い。
+
+影響:
+
+- ブラウザ・Dockerログのノイズが増え、遅延調査のウォーターフォールや重要ログを追いづらい。
+- ログ出力自体も低速端末や大量操作時には無視できないコストになる。
+
+改善案:
+
+- 本番ビルドではdebugログを出さない方針を明確化する。
+- フロントは `process.env.NODE_ENV !== 'production'` でガードするか、専用debug loggerに寄せる。
+- バックエンドは成功パスの詳細ログを `debug` に下げ、失敗・遅延・外部APIエラーだけを構造化ログで残す。
+
+### 10. 認証後・保護ページでCSRF初期化が追加APIになる
+
+該当箇所:
+
+- `k_front/components/protected/LayoutClient.tsx`
+- `k_front/lib/csrf.ts`
+- `k_back/app/api/v1/endpoints/csrf.py`
+
+内容:
+
+- 保護レイアウト初回マウント時に `initializeCsrfToken()` が走る。
+- ログイン/MFA直後のDashboard初期表示と同時に、CSRF取得APIも追加で走る。
+
+影響:
+
+- 1回あたりは軽いが、ログイン直後のAPI集中の一部になっている。
+- コールドスタート/DB接続再確立が絡む時間帯では、軽量APIでも待ち行列を増やす可能性がある。
+
+改善案:
+
+- ログイン/MFA成功レスポンスでCSRFトークンを同時に返せるか検討する。
+- すでに有効なCSRFトークンがある場合は初期化APIをスキップする。
+- 初期描画に不要なら、ユーザー操作前まで遅延して取得する。
+
 ## 実DBインデックス確認結果
 
 実DBでは以下のDashboard系インデックスは確認済み:
