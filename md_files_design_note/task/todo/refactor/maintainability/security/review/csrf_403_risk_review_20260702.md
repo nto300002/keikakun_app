@@ -193,3 +193,208 @@ rg -n "fetch\\(|method:\\s*['\\\"](POST|PUT|PATCH|DELETE)['\\\"]|FormData\\(" k_
 - メッセージ送信が403にならない。
 - 利用者登録/編集/削除が403にならない。
 - stale Cookieが残っている状態でログインPOSTが403にならないか確認する。
+
+---
+
+FAILED tests/api/v1/test_employee_action_requests.py::test_create_employee_action_request - assert 403 == 201
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_employee_action_requests.py::test_create_employee_action_request_update - assert 403 == 201
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_employee_action_requests.py::test_create_employee_action_request_delete - assert 403 == 201
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_employee_action_requests.py::test_approve_employee_action_request_as_manager - assert 403 == 200
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_employee_action_requests.py::test_approve_employee_action_request_as_owner - assert 403 == 200
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_employee_action_requests.py::test_approve_employee_action_request_already_approved - assert 403 == 400
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_employee_action_requests.py::test_reject_employee_action_request - assert 403 == 200
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_employee_action_requests.py::test_delete_pending_employee_action_request - assert 403 == 204
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_employee_action_requests.py::test_delete_approved_employee_action_request_fails - assert 403 == 400
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_inquiry_endpoints.py::TestInquiryPublicEndpoint::test_create_inquiry_from_logged_in_user - assert 403 == 200
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_inquiry_endpoints.py::TestAdminInquiryUpdateEndpoint::test_update_inquiry_as_app_admin - assert 403 == 200
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_inquiry_endpoints.py::TestAdminInquiryReplyEndpoint::test_reply_to_inquiry_from_logged_in_sender - assert 403 == 200
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_inquiry_endpoints.py::TestAdminInquiryReplyEndpoint::test_reply_to_inquiry_with_email - assert 403 == 200
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_inquiry_endpoints.py::TestAdminInquiryReplyEndpoint::test_reply_to_inquiry_not_found - assert 403 == 404
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_inquiry_endpoints.py::TestAdminInquiryReplyEndpoint::test_reply_to_inquiry_empty_body_fails - assert 403 == 422
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_inquiry_endpoints.py::TestAdminInquiryReplyEndpoint::test_reply_as_non_admin_fails - AssertionError: assert '権限がありません' in 'CSRF token validation failed'
+FAILED tests/api/v1/test_inquiry_endpoints.py::TestAdminInquiryDeleteEndpoint::test_delete_inquiry_as_app_admin - assert 403 == 200
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_inquiry_endpoints.py::TestAdminInquiryDeleteEndpoint::test_delete_inquiry_not_found - assert 403 == 404
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_notices.py::test_mark_notice_as_read - assert 403 == 200
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_notices.py::test_mark_all_notices_as_read - assert 403 == 200
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_notices.py::test_delete_notice - assert 403 == 204
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_auth.py::TestCookieAuthentication::test_logout_clears_cookie - assert 403 == 200
+
+---
+
+## 2026-07-02 本番/CI 追加エラー調査: 退会リクエスト中心
+
+### 受領した失敗全文
+
+```text
+FAILED tests/api/v1/test_withdrawal_requests.py::test_approve_withdrawal_request_already_processed - assert 403 == 400
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_withdrawal_requests.py::test_reject_withdrawal_request_as_app_admin - assert 403 == 200
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_withdrawal_requests.py::test_reject_withdrawal_request_not_found - assert 403 == 404
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/services/test_calendar_service.py::TestCalendarService::test_sync_pending_events_with_api_error - AssertionError: assert 'API Error' in 'GoogleCalendarAPIError'
+ +  where 'GoogleCalendarAPIError' = <app.models.calendar_events.CalendarEvent object at 0x7ffaf4657bf0>.last_error_message
+FAILED tests/utils/test_email_utils.py::TestSendEmailWithRetry::test_all_retries_fail - AssertionError: assert 'Exception' == 'Permanent failure'
+```
+
+関連する既存の同種失敗:
+
+```text
+FAILED tests/api/v1/test_employee_action_requests.py::test_create_employee_action_request - assert 403 == 201
+FAILED tests/api/v1/test_employee_action_requests.py::test_create_employee_action_request_update - assert 403 == 201
+FAILED tests/api/v1/test_employee_action_requests.py::test_create_employee_action_request_delete - assert 403 == 201
+FAILED tests/api/v1/test_employee_action_requests.py::test_approve_employee_action_request_as_manager - assert 403 == 200
+FAILED tests/api/v1/test_employee_action_requests.py::test_approve_employee_action_request_as_owner - assert 403 == 200
+FAILED tests/api/v1/test_employee_action_requests.py::test_approve_employee_action_request_already_approved - assert 403 == 400
+FAILED tests/api/v1/test_employee_action_requests.py::test_reject_employee_action_request - assert 403 == 200
+FAILED tests/api/v1/test_employee_action_requests.py::test_delete_pending_employee_action_request - assert 403 == 204
+FAILED tests/api/v1/test_employee_action_requests.py::test_delete_approved_employee_action_request_fails - assert 403 == 400
+FAILED tests/api/v1/test_inquiry_endpoints.py::TestInquiryPublicEndpoint::test_create_inquiry_from_logged_in_user - assert 403 == 200
+FAILED tests/api/v1/test_inquiry_endpoints.py::TestAdminInquiryUpdateEndpoint::test_update_inquiry_as_app_admin - assert 403 == 200
+FAILED tests/api/v1/test_inquiry_endpoints.py::TestAdminInquiryReplyEndpoint::test_reply_to_inquiry_from_logged_in_sender - assert 403 == 200
+FAILED tests/api/v1/test_inquiry_endpoints.py::TestAdminInquiryReplyEndpoint::test_reply_to_inquiry_with_email - assert 403 == 200
+FAILED tests/api/v1/test_inquiry_endpoints.py::TestAdminInquiryReplyEndpoint::test_reply_to_inquiry_not_found - assert 403 == 404
+FAILED tests/api/v1/test_inquiry_endpoints.py::TestAdminInquiryReplyEndpoint::test_reply_to_inquiry_empty_body_fails - assert 403 == 422
+FAILED tests/api/v1/test_inquiry_endpoints.py::TestAdminInquiryReplyEndpoint::test_reply_as_non_admin_fails - AssertionError: assert '権限がありません' in 'CSRF token validation failed'
+FAILED tests/api/v1/test_inquiry_endpoints.py::TestAdminInquiryDeleteEndpoint::test_delete_inquiry_as_app_admin - assert 403 == 200
+FAILED tests/api/v1/test_inquiry_endpoints.py::TestAdminInquiryDeleteEndpoint::test_delete_inquiry_not_found - assert 403 == 404
+FAILED tests/api/v1/test_notices.py::test_mark_notice_as_read - assert 403 == 200
+FAILED tests/api/v1/test_notices.py::test_mark_all_notices_as_read - assert 403 == 200
+FAILED tests/api/v1/test_notices.py::test_delete_notice - assert 403 == 204
+FAILED tests/api/v1/test_auth.py::TestCookieAuthentication::test_logout_clears_cookie - assert 403 == 200
+```
+
+### 調査結果
+
+認証系の失敗原因:
+
+- `app/main.py` の CSRF middleware は Cookie 認証の `POST` / `PUT` / `PATCH` / `DELETE` に `X-CSRF-Token` を要求する。
+- 退会リクエスト承認/却下、employee action、問い合わせ管理、通知既読/削除のテストは `access_token` Cookie だけを設定し、CSRF token/cookie を付けていなかった。
+- そのため、エンドポイント本体の権限・404・400 検証へ到達する前に middleware が `403 CSRF token validation failed` を返していた。
+- フロントの `withdrawalRequestsApi` は `http` wrapper 経由で、状態変更前の CSRF 遅延取得と 403 時の token 再取得リトライを通る。退会リクエスト画面側の実装はこの観点では正しい。
+- `POST /api/v1/auth/logout` は認証エラー時の後始末として呼ばれるため、CSRF 失敗で Cookie 削除ができない方が問題になる。ログイン系と同じく middleware exempt が妥当。
+
+非認証系の失敗原因:
+
+- `test_calendar_service.py::test_sync_pending_events_with_api_error` は、同期失敗時に `str(exc)` ではなく `type(exc).__name__` を保存していたため、`API Error` が `GoogleCalendarAPIError` に置き換わっていた。
+- `test_email_utils.py::test_all_retries_fail` は、メール送信失敗時に `str(e)` ではなく `type(e).__name__` を戻していたため、`Permanent failure` が `Exception` に置き換わっていた。
+
+### 対応
+
+- `tests/conftest.py` に `csrf_headers` fixture を追加。
+- Cookie 認証で状態変更する以下のテストへ `X-CSRF-Token` を付与。
+  - `tests/api/v1/test_withdrawal_requests.py`
+  - `tests/api/v1/test_employee_action_requests.py`
+  - `tests/api/v1/test_inquiry_endpoints.py`
+  - `tests/api/v1/test_notices.py`
+- `POST /api/v1/auth/logout` と trailing slash variant を `CSRF_EXEMPT_PATHS` に追加。
+- カレンダー同期失敗時の `last_error_message` は `str(exc) or type(exc).__name__` を保存するよう修正。
+- メール送信リトライ失敗時の `result["error"]` は `str(e) or type(e).__name__` を保存するよう修正。
+
+### 検証
+
+```bash
+docker exec keikakun_app-backend-1 pytest tests/api/v1/test_withdrawal_requests.py tests/api/v1/test_auth.py::TestCookieAuthentication::test_logout_clears_cookie
+```
+
+結果:
+
+```text
+18 passed in 106.55s
+```
+
+```bash
+docker exec keikakun_app-backend-1 pytest tests/api/v1/test_withdrawal_requests.py tests/api/v1/test_employee_action_requests.py tests/api/v1/test_inquiry_endpoints.py tests/api/v1/test_notices.py tests/api/v1/test_auth.py::TestCookieAuthentication::test_logout_clears_cookie
+```
+
+結果:
+
+```text
+59 passed, 14 warnings in 425.03s
+```
+
+```bash
+docker exec keikakun_app-backend-1 pytest tests/services/test_calendar_service.py::TestCalendarService::test_sync_pending_events_with_api_error tests/utils/test_email_utils.py::TestSendEmailWithRetry::test_all_retries_fail
+```
+
+結果:
+
+```text
+2 passed in 20.41s
+```
+
+### 結論
+
+退会処理/MFA設定後に見えていた 403 の主因は、退会ロジックや app_admin 権限判定ではなく、Cookie 認証の状態変更リクエストが CSRF middleware で先に拒否されること。
+
+本番フロントは `http` wrapper を通る限り CSRF token を取得して送るため、退会リクエスト API 呼び出し自体は修正済み方針に合っている。今後の追加 API でも、Cookie 認証の状態変更を直接 `fetch` しないこと、テストでは Cookie 認証時に CSRF token を明示することを徹底する。
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_auth.py::TestCookieAuthentication::test_cookie_attributes_in_*** - RuntimeError: SECRET_KEY must be configured for ***
+FAILED tests/api/v1/test_auth.py::TestCookieAuthentication::test_cookie_domain_in_*** - RuntimeError: SECRET_KEY must be configured for ***
+FAILED tests/api/v1/test_role_change_requests.py::test_create_role_change_request_employee_to_manager - assert 403 == 201
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_role_change_requests.py::test_create_role_change_request_employee_to_owner - assert 403 == 201
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_role_change_requests.py::test_create_role_change_request_manager_to_owner - assert 403 == 201
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_role_change_requests.py::test_create_role_change_request_same_role - assert 403 == 400
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_role_change_requests.py::test_approve_role_change_request_as_manager - assert 403 == 200
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_role_change_requests.py::test_approve_role_change_request_as_owner - assert 403 == 200
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_role_change_requests.py::test_approve_role_change_request_already_approved - assert 403 == 400
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_role_change_requests.py::test_reject_role_change_request - assert 403 == 200
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_role_change_requests.py::test_delete_pending_role_change_request - assert 403 == 204
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_role_change_requests.py::test_delete_approved_role_change_request_fails - assert 403 == 400
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_withdrawal_requests.py::test_create_withdrawal_request_as_owner - assert 403 == 201
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_withdrawal_requests.py::test_create_withdrawal_request_empty_title - assert 403 == 422
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_withdrawal_requests.py::test_create_withdrawal_request_empty_reason - assert 403 == 422
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_withdrawal_requests.py::test_approve_withdrawal_request_as_app_admin - assert 403 == 200
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_withdrawal_requests.py::test_approve_withdrawal_request_not_found - assert 403 == 404
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_withdrawal_requests.py::test_approve_withdrawal_request_already_processed - assert 403 == 400
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_withdrawal_requests.py::test_reject_withdrawal_request_as_app_admin - assert 403 == 200
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/api/v1/test_withdrawal_requests.py::test_reject_withdrawal_request_not_found - assert 403 == 404
+ +  where 403 = <Response [403 Forbidden]>.status_code
+FAILED tests/services/test_calendar_service.py::TestCalendarService::test_sync_pending_events_with_api_error - AssertionError: assert 'API Error' in 'GoogleCalendarAPIError'
+ +  where 'GoogleCalendarAPIError' = <app.models.calendar_events.CalendarEvent object at 0x7ffaf4657bf0>.last_error_message
+FAILED tests/utils/test_email_utils.py::TestSendEmailWithRetry::test_all_retries_fail - AssertionError: assert 'Exception' == 'Permanent failure'
+
+  - Permanent failure
+  + Exception
+FAILED tests/utils/test_email_utils.py::TestSendAndLogEmail::test_send_and_log_failure - AssertionError: assert 'Exception' == 'Send failed'
+
+  - Send failed
+  + Exception
+==== 45 failed, 1893 passed, 90 skipped, 191 warnings in 1217.48s (0:20:17) ====
