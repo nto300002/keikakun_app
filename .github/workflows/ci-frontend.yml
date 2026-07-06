@@ -212,13 +212,13 @@ jobs:
 
       # ─── Artifacts ───────────────────────────────────────────────────────────
       - name: Upload Playwright HTML report
-        # 成功・失敗問わずレポートをアップロード（結果の可視化のため）
-        if: always()
+        # 失敗時のみ短期保存する（HTML reportには画面表示やtrace参照が含まれ得る）
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-${{ github.run_id }}
           path: k_front/playwright-report/
-          retention-days: 14
+          retention-days: 7
 
       - name: Upload server logs on failure
         # (#4) 失敗時にバックエンド・フロントエンドのログをアップロード

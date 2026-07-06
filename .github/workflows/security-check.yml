@@ -86,3 +86,11 @@ jobs:
           pip install pip-audit
           pip-audit || true
         continue-on-error: true
+
+      - name: Security log static check
+        working-directory: k_back
+        run: python scripts/security_log_static_check.py --mode block --allowlist-file security_log_allowlist.json app scripts
+
+      - name: Frontend/E2E security log static check
+        working-directory: k_back
+        run: python scripts/security_log_static_check.py --mode block --allowlist-file security_log_allowlist.json ../k_front
