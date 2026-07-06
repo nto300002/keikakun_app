@@ -22,6 +22,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -64,6 +66,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -86,17 +90,37 @@ jobs:
     # lint/build が通ってから E2E を実行する
     needs: [build-and-test, lint-and-format]
     timeout-minutes: 30
-    # バックエンドで共通して使用する環境変数をジョブレベルで定義
-    # (#23) 各ステップへの重複記述を防ぐ
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: keikakun_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d keikakun_e2e"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
-      DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
-      SECRET_KEY: ${{ secrets.E2E_SECRET_KEY }}
+      BACKEND_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/keikakun_e2e
+      SECRET_KEY: e2e-test-secret-key
       FRONTEND_URL: http://localhost:3000
-      ENVIRONMENT: test
+      ENVIRONMENT: development
+      TESTING: "1"
+      MAIL_USERNAME: e2e@example.com
+      MAIL_PASSWORD: e2e-mail-password
+      MAIL_FROM: e2e@example.com
+      MAIL_SERVER: localhost
+      MAIL_DEBUG: "1"
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
 
       # ─── Backend ────────────────────────────────────────────────────────────
       - name: Setup Python 3.12
@@ -108,28 +132,179 @@ jobs:
 
       - name: Install backend dependencies
         working-directory: k_back
-        run: pip install -r requirements.txt
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
 
-      - name: Run DB migrations
+      - name: Create backend schema
         working-directory: k_back
-        run: alembic upgrade head
+        run: |
+          python - <<'PY'
+          import asyncio
 
-      - name: Ensure E2E owner account exists
-        # 冪等: owner がすでに存在する場合はスキップして終了する
-        # (#3) シークレットを CLI 引数でなく環境変数経由で渡す（プロセスリストへの漏洩防止）
-        working-directory: k_back
-        run: python scripts/create_e2e_owner.py
+          from sqlalchemy import text
+          from sqlalchemy.schema import DefaultClause
+
+          import app.models  # noqa: F401 - register all SQLAlchemy models
+          from app.db.base import Base
+          from app.db.session import async_engine
+          from app.models.billing import Billing
+          from app.models.push_subscription import PushSubscription  # noqa: F401
+          from app.models.webhook_event import WebhookEvent
+
+          for column, expression in (
+              (Billing.__table__.c.id, "gen_random_uuid()"),
+              (Billing.__table__.c.created_at, "now()"),
+              (Billing.__table__.c.updated_at, "now()"),
+              (WebhookEvent.__table__.c.id, "gen_random_uuid()"),
+              (WebhookEvent.__table__.c.processed_at, "now()"),
+              (WebhookEvent.__table__.c.created_at, "now()"),
+          ):
+              column.server_default = DefaultClause(text(expression))
+
+          async def main():
+              async with async_engine.begin() as conn:
+                  await conn.run_sync(Base.metadata.create_all)
+
+          asyncio.run(main())
+          PY
         env:
+          DATABASE_URL: ${{ env.BACKEND_DATABASE_URL }}
+          TEST_DATABASE_URL: ${{ env.BACKEND_DATABASE_URL }}
+
+      - name: Seed E2E owner
+        working-directory: k_back
+        run: |
+          python - <<'PY'
+          import asyncio
+          import os
+          from datetime import datetime, timedelta, timezone
+
+          from sqlalchemy import select
+
+          import app.models  # noqa: F401 - register relationship targets
+          from app.core.security import get_password_hash
+          from app.db.session import AsyncSessionLocal
+          from app.models.billing import Billing
+          from app.models.enums import BillingStatus, OfficeType, StaffRole
+          from app.models.office import Office, OfficeStaff
+          from app.models.push_subscription import PushSubscription  # noqa: F401
+          from app.models.staff import Staff
+
+          async def main():
+              async with AsyncSessionLocal() as db:
+                  owner_email = os.environ.get("E2E_OWNER_EMAIL")
+                  owner_password = os.environ.get("E2E_OWNER_PASSWORD")
+                  if not owner_email or not owner_password:
+                      raise RuntimeError("E2E_OWNER_EMAIL / E2E_OWNER_PASSWORD are required")
+
+                  result = await db.execute(select(Staff).where(Staff.email == owner_email))
+                  owner = result.scalar_one_or_none()
+                  if owner is None:
+                      owner = Staff(
+                          email=owner_email,
+                          hashed_password=get_password_hash(owner_password),
+                          name="E2E Owner",
+                          last_name="E2E",
+                          first_name="Owner",
+                          last_name_furigana="いーつーいー",
+                          first_name_furigana="おーなー",
+                          full_name="E2E Owner",
+                          role=StaffRole.owner,
+                          is_email_verified=True,
+                          is_mfa_enabled=False,
+                          is_mfa_verified_by_user=False,
+                          is_test_data=True,
+                      )
+                      db.add(owner)
+                      await db.flush()
+                  else:
+                      owner.hashed_password = get_password_hash(owner_password)
+                      owner.role = StaffRole.owner
+                      owner.is_email_verified = True
+                      owner.is_mfa_enabled = False
+                      owner.is_mfa_verified_by_user = False
+                      owner.is_deleted = False
+
+                  office_result = await db.execute(
+                      select(Office).where(Office.name == "E2E Test Office")
+                  )
+                  office = office_result.scalar_one_or_none()
+                  if office is None:
+                      office = Office(
+                          name="E2E Test Office",
+                          is_group=False,
+                          type=OfficeType.type_B_office,
+                          address="東京都新宿区西新宿1-1-1",
+                          phone_number="03-0000-0000",
+                          email="e2e-office@example.com",
+                          created_by=owner.id,
+                          last_modified_by=owner.id,
+                          is_test_data=True,
+                      )
+                      db.add(office)
+                      await db.flush()
+                  else:
+                      office.is_deleted = False
+                      office.created_by = owner.id
+                      office.last_modified_by = owner.id
+
+                  assoc_result = await db.execute(
+                      select(OfficeStaff).where(
+                          OfficeStaff.staff_id == owner.id,
+                          OfficeStaff.office_id == office.id,
+                      )
+                  )
+                  if assoc_result.scalar_one_or_none() is None:
+                      db.add(OfficeStaff(
+                          staff_id=owner.id,
+                          office_id=office.id,
+                          is_primary=True,
+                          is_test_data=True,
+                      ))
+
+                  billing_result = await db.execute(
+                      select(Billing).where(Billing.office_id == office.id)
+                  )
+                  billing = billing_result.scalar_one_or_none()
+                  now = datetime.now(timezone.utc)
+                  if billing is None:
+                      db.add(Billing(
+                          office_id=office.id,
+                          billing_status=BillingStatus.active,
+                          trial_start_date=now - timedelta(days=1),
+                          trial_end_date=now + timedelta(days=30),
+                          subscription_start_date=now,
+                          next_billing_date=now + timedelta(days=30),
+                          current_plan_amount=6000,
+                      ))
+                  else:
+                      billing.billing_status = BillingStatus.active
+                      billing.trial_start_date = now - timedelta(days=1)
+                      billing.trial_end_date = now + timedelta(days=30)
+                      billing.subscription_start_date = now
+                      billing.next_billing_date = now + timedelta(days=30)
+                      billing.current_plan_amount = 6000
+
+                  await db.commit()
+
+          asyncio.run(main())
+          PY
+        env:
+          DATABASE_URL: ${{ env.BACKEND_DATABASE_URL }}
+          TEST_DATABASE_URL: ${{ env.BACKEND_DATABASE_URL }}
           E2E_OWNER_EMAIL: ${{ secrets.E2E_OWNER_EMAIL }}
           E2E_OWNER_PASSWORD: ${{ secrets.E2E_OWNER_PASSWORD }}
 
       - name: Start backend server
-        # (#4/#24) ログをファイルに記録し、PID を環境変数に保持してデバッグを容易にする
         working-directory: k_back
         run: |
-          uvicorn app.main:app --host 0.0.0.0 --port 8000 \
+          python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 \
             > /tmp/backend.log 2>&1 &
           echo "BACKEND_PID=$!" >> "$GITHUB_ENV"
+        env:
+          DATABASE_URL: ${{ env.BACKEND_DATABASE_URL }}
+          TEST_DATABASE_URL: ${{ env.BACKEND_DATABASE_URL }}
 
       - name: Wait for backend to be ready
         run: |
@@ -206,19 +381,20 @@ jobs:
           CI: "true"
           PLAYWRIGHT_BASE_URL: http://localhost:3000
           NEXT_PUBLIC_API_URL: http://localhost:8000
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
           E2E_OWNER_EMAIL: ${{ secrets.E2E_OWNER_EMAIL }}
           E2E_OWNER_PASSWORD: ${{ secrets.E2E_OWNER_PASSWORD }}
           E2E_STAFF_PASSWORD: ${{ secrets.E2E_STAFF_PASSWORD }}
 
       # ─── Artifacts ───────────────────────────────────────────────────────────
       - name: Upload Playwright HTML report
-        # 成功・失敗問わずレポートをアップロード（結果の可視化のため）
-        if: always()
+        # 失敗時のみ短期保存する（HTML reportには画面表示やtrace参照が含まれ得る）
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-${{ github.run_id }}
           path: k_front/playwright-report/
-          retention-days: 14
+          retention-days: 7
 
       - name: Upload server logs on failure
         # (#4) 失敗時にバックエンド・フロントエンドのログをアップロード
