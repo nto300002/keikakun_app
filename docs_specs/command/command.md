@@ -1,0 +1,1 @@
+STRIPE_PRICE_ID=price_1SdO6OBxyBErCNcALazuDrcu ./k_back/scripts/test_billing_status_transition.sh daae3740-ee95-4967-a34d-9eca0d487dc9
