@@ -10,3 +10,6 @@ services:
       - ./k_back:/app
     env_file:
       - .env
+    environment:
+      DATABASE_URL: ${DEV_DATABASE_URL}
+      TEST_DATABASE_URL: ${DEV_TEST_DATABASE_URL}
