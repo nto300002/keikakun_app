@@ -36,6 +36,18 @@ jobs:
           PROD_TEST_DB_URL_LENGTH: ${{ secrets.PROD_TEST_DATABASE_URL && 'Set' || 'Not Set' }}
           TEST_DB_URL_LENGTH: ${{ secrets.TEST_DATABASE_URL && 'Set' || 'Not Set' }}
 
+      - name: Verify test DB Alembic baseline
+        working-directory: ./k_back
+        env:
+          DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+          ALEMBIC_BASELINE_REVISION: baseline_20260701
+        run: python scripts/alembic_baseline_guard.py
+
+      - name: Run Alembic migrations for test DB
+        working-directory: ./k_back
+        env:
+          DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+        run: alembic upgrade head
 
       - name: Run Pytest
         working-directory: ./k_back
