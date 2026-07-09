@@ -61,6 +61,33 @@ docker exec keikakun_app-backend-1 python -m pytest
 - Docker daemon への接続に権限が必要な場合は、`docker exec` の実行許可を取得してから進める。
 - backend のテスト結果は、コンテナ内のアプリコード・依存関係・環境変数を基準に判断する。
 
+### backend コンテナ起動前エラーの切り分け
+
+backend コンテナが Python 起動前に次のようなエラーで落ちる場合がある。
+
+```text
+Fatal Python error: init_fs_encoding: failed to get the Python codec of the filesystem encoding
+OSError: [Errno 24] Too many open files: '/app'
+```
+
+この場合は、DB接続、Alembic、pytest の失敗ではなく、Docker Desktop の bind mount `./k_back:/app` 参照時の問題として扱う。まず現在の状態を確認する。
+
+```bash
+docker compose ps
+docker logs --tail=80 keikakun_app-backend-1
+```
+
+DB metadata の read-only 確認など、アプリ import が不要な診断だけであれば、`/app` を参照しないように `/tmp` へ移動し、`PYTHONPATH` を外して backend コンテナ内 Python を起動する。
+
+```bash
+docker compose run --rm --entrypoint sh backend -lc 'cd /tmp && unset PYTHONPATH && python - <<"..."
+print("python_ok")
+...
+'
+```
+
+この回避は環境診断専用とし、pytest やアプリケーション挙動の検証には使わない。pytest や Alembic の通常確認は、backend コンテナが `/app` を正常に参照できる状態に戻してから実行する。
+
 ---
 
 ## DB migration / SQLファイル作成ルール
@@ -79,6 +106,52 @@ docker exec keikakun_app-backend-1 python -m pytest
 - 破壊的変更、enum値削除、カラム削除、NOT NULL化、制約強化は、通常CDに一括で混ぜず、前方互換を保つ段階的migrationに分ける。
 - `CREATE INDEX CONCURRENTLY` のようにAlembicの通常トランザクションと相性が悪い処理は、migration設計時に明記し、必要に応じて専用migrationまたは個別手順として扱う。
 - 既存DBのbaseline合わせで `alembic stamp` を使う場合は、通常CDではなく管理操作として扱い、実行環境・対象DB・revisionをmdに記録する。
+- CI/CDやmigration関連の変更をpushする前に、GitHub Actions workflow と Cloud Build substitutions のDB接続先を必ず照合する。
+- GitHub Actionsの `secrets.*` 名が実際に存在するか確認し、存在しないDB secretを参照しない。例えば `PROD_TEST_DATABASE_URL` が存在しない運用では、Cloud Buildの `_PROD_TEST_DATABASE_URL` へ渡す値を、実在する `TEST_DATABASE_URL` など意図した接続先に明示的に割り当てる。
+- DB接続先の確認では、GitHub Actions側の `secrets.*`、Cloud Build側の `_SUBSTITUTION`、コンテナ内の `DATABASE_URL` / `TEST_DATABASE_URL` がどのDBを指すかを一続きで確認する。
+- 現時点で確認済みの GitHub Actions secrets 名は次の通り。workflow 変更時はこの一覧にない `secrets.*` を追加参照しない。
+  - `AWS_ACCESS_KEY_ID`
+  - `AWS_REGION`
+  - `AWS_SECRET_ACCESS_KEY`
+  - `CALENDAR_ENCRYPTION_KEY`
+  - `COOKIE_DOMAIN`
+  - `COOKIE_SAMESITE`
+  - `COOKIE_SECURE`
+  - `E2E_API_URL`
+  - `E2E_DATABASE_URL`
+  - `E2E_OWNER_EMAIL`
+  - `E2E_OWNER_PASSWORD`
+  - `E2E_SECRET_KEY`
+  - `E2E_STAFF_PASSWORD`
+  - `E2E_STRIPE_PUBLISHABLE_KEY`
+  - `E2E_VAPID_PUBLIC_KEY`
+  - `ENVIRONMENT`
+  - `FRONTEND_URL`
+  - `GCP_PROJECT_ID`
+  - `GCP_SA_KEY`
+  - `MAIL_PASSWORD`
+  - `MAIL_PORT`
+  - `MAIL_SERVER`
+  - `MAIL_USERNAME`
+  - `PASSWORD_RESET_TOKEN_EXPIRE_MINUTES`
+  - `PLAYWRIGHT_BASE_URL`
+  - `PROD_DATABASE_URL`
+  - `PROD_SECRET_KEY`
+  - `RATE_LIMIT_FORGOT_PASSWORD`
+  - `RATE_LIMIT_RESEND_EMAIL`
+  - `S3_ACCESS_KEY`
+  - `S3_BUCKET_NAME`
+  - `S3_REGION`
+  - `S3_SECRET_KEY`
+  - `SENDER_EMAIL`
+  - `STRIPE_PRICE_ID`
+  - `STRIPE_PUBLISHABLE_KEY`
+  - `STRIPE_SECRET_KEY`
+  - `STRIPE_WEBHOOK_SECRET`
+  - `TEST_DATABASE_URL`
+  - `VAPID_PRIVATE_KEY`
+  - `VAPID_PUBLIC_KEY`
+- `ENCRYPTION_KEY` は現在 GitHub Actions secrets に存在しない。明示的に secret を追加するまでは `secrets.ENCRYPTION_KEY` を参照しない。現行の本番 MFA 互換性では、Cloud Build の `_ENCRYPTION_KEY` は既存の `secrets.PROD_SECRET_KEY` から渡す。別鍵に切り替える場合は、既存 `mfa_secret` の復号・再暗号化を含む鍵ローテーション計画を先に作る。
 
 レビュー時の確認項目:
 
@@ -88,6 +161,9 @@ docker exec keikakun_app-backend-1 python -m pytest
 - [ ] rollback相当の手順があるか？
 - [ ] 実行前・実行後の確認SQLまたは確認手順があるか？
 - [ ] 既存データ更新の対象件数を確認できるか？
+- [ ] CI/CD workflow が実在するDB secret名だけを参照しているか？
+- [ ] Cloud Build substitutions と `DATABASE_URL` の対応が意図したDB接続先になっているか？
+- [ ] CI/CD workflow が実在する全 secret 名だけを参照しているか？特に未作成の `ENCRYPTION_KEY` を参照していないか？
 
 ### local Alembic確認コマンド
 
