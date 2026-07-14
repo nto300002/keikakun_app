@@ -41,6 +41,24 @@ print("python_ok")
 - Prefer structured file edits through the normal patch/edit tool.
 - Avoid `sed -i` for source edits unless the change is mechanical and clearly safer that way.
 
+## DevGuard Before Commit and Push
+
+- Before committing, run DevGuard against the staged diff:
+
+```bash
+npx --yes @nto300002/devguard check --staged-diff
+```
+
+- Before pushing, run DevGuard against the branch diff:
+
+```bash
+npx --yes @nto300002/devguard push-check --agent-block
+```
+
+- Read the DevGuard output before continuing. Treat high-risk findings as blockers unless the user explicitly approves proceeding.
+- When DevGuard reports warnings, findings, or manual-check items, summarize the relevant output to the user and ask for confirmation before commit or push.
+- Do not ignore DevGuard suppression comments unless they include a concrete reason.
+
 ## Backend Architecture
 
 - Follow the existing layered architecture:
