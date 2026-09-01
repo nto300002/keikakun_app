@@ -49,6 +49,12 @@ print("python_ok")
 npx --yes @nto300002/devguard check --staged-diff
 ```
 
+- Before committing or pushing, run the repository security check:
+
+```bash
+npx --yes --package=@nto300002/devguard@0.1.8 devguard security-check
+```
+
 - Before pushing, run DevGuard against the branch diff:
 
 ```bash
