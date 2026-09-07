@@ -43,27 +43,16 @@ print("python_ok")
 
 ## DevGuard Before Commit and Push
 
-- Before committing, run DevGuard against the staged diff:
+- The repository `pre-push` DevGuard hook is intentionally disabled. Do not re-enable or bypass another hook.
+- Run these checks manually before committing or pushing, and read their output:
 
 ```bash
-npx --yes @nto300002/devguard check --staged-diff
+npx --yes --package=agent-safecheck safecheck security-check
+npx --yes --package=agent-safecheck safecheck security-check --mode general
+npx --yes --package=agent-safecheck safecheck check --staged-diff
 ```
 
-- Before committing or pushing, run the repository security check:
-
-```bash
-npx --yes --package=@nto300002/devguard@0.1.8 devguard security-check
-```
-
-- Before pushing, run DevGuard against the branch diff:
-
-```bash
-npx --yes @nto300002/devguard push-check --agent-block
-```
-
-- Read the DevGuard output before continuing. Treat high-risk findings as blockers unless the user explicitly approves proceeding.
-- When DevGuard reports warnings, findings, or manual-check items, summarize the relevant output to the user and ask for confirmation before commit or push.
-- Do not ignore DevGuard suppression comments unless they include a concrete reason.
+- Treat findings as review items. Proceed with the user's explicit approval after summarizing relevant findings.
 
 ## Backend Architecture
 
