@@ -396,7 +396,7 @@ jobs:
       - name: Upload Playwright HTML report
         # 失敗時のみ短期保存する（HTML reportには画面表示やtrace参照が含まれ得る）
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report-${{ github.run_id }}
           path: k_front/playwright-report/
@@ -405,7 +405,7 @@ jobs:
       - name: Upload server logs on failure
         # (#4) 失敗時にバックエンド・フロントエンドのログをアップロード
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: server-logs-${{ github.run_id }}
           path: |
@@ -416,7 +416,7 @@ jobs:
       - name: Upload test results on failure
         # 失敗時のみスクリーンショット・動画・トレースをアップロード
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-test-results-${{ github.run_id }}
           path: k_front/test-results/
