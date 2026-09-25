@@ -47,15 +47,25 @@ jobs:
           DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
         run: alembic upgrade head
 
-      - name: Run Pytest
+      - name: Verify test DB schema constraints
         working-directory: ./k_back
         env:
+          DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+          ALEMBIC_BASELINE_REVISION: baseline_20260701
+          VERIFY_SCHEMA_CONSTRAINTS: "1"
+        run: python scripts/alembic_baseline_guard.py
+
+      - name: Run shared DB cleanup tests serially
+        working-directory: ./k_back
+        env: &test-env
           TESTING: "1"
           ENVIRONMENT: "test"
-          DATABASE_URL: ${{ secrets.DATABASE_URL }} # ここは変更しない
+          DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
           TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
-          SECRET_KEY: ${{ secrets.TEST_SECRET_KEY }}
+          # E2E専用の既存secretを利用し、本番JWT鍵をrunnerへ渡さない。
+          SECRET_KEY: ${{ secrets.E2E_SECRET_KEY }}
           FRONTEND_URL: "http://test.local"
+          # 既存secretから注入し、鍵素材をworkflowに固定しない。
           CALENDAR_ENCRYPTION_KEY: ${{ secrets.CALENDAR_ENCRYPTION_KEY }}
           # ダミーのメール情報を追加
           MAIL_USERNAME: "testuser"
@@ -65,16 +75,16 @@ jobs:
           MAIL_PORT: "587"
           # ライブラリの仕様に合わせ "1" (True) を使用
           MAIL_DEBUG: "1"
-          # Stripe設定
-          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
-          STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
-          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
-          STRIPE_PRICE_ID: ${{ secrets.STRIPE_PRICE_ID }}
-          # VAPID設定（Web Push通知）
-          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
-          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
-          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
-        run: pytest -n auto -m "not performance"
+          # 外部課金・Push連携の本番secretはCIへ渡さない。
+          STRIPE_PUBLISHABLE_KEY: "test-publishable-key"
+          STRIPE_PRICE_ID: "test-price-id"
+          VAPID_SUBJECT: "mailto:test@example.com"
+        run: pytest -m "serial_db_cleanup and not performance"
+
+      - name: Run Pytest
+        working-directory: ./k_back
+        env: *test-env
+        run: pytest -n auto -m "not performance and not serial_db_cleanup"
 
       - name: Authenticate to Google Cloud
         id: auth
