@@ -60,7 +60,8 @@ jobs:
         env: &test-env
           TESTING: "1"
           ENVIRONMENT: "test"
-          DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+          # アプリ設定用URLとテスト実行先を分離する。pytest は TEST_DATABASE_URL を優先する。
+          DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
           TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
           # E2E専用の既存secretを利用し、本番JWT鍵をrunnerへ渡さない。
           SECRET_KEY: ${{ secrets.E2E_SECRET_KEY }}
