@@ -44,6 +44,10 @@ jobs:
         working-directory: k_front
         run: npx tsc --noEmit
 
+      - name: Run unit tests
+        working-directory: k_front
+        run: npm run test:unit
+
       - name: Build application
         working-directory: k_front
         run: npm run build
